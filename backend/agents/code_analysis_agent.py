@@ -178,7 +178,12 @@ class CodeAnalysisAgent:
 
     def _get_boto_session(self):
         kwargs = {"region_name": self.aws_region}
-        if self.aws_access_key and self.aws_secret_key:
+        in_ecs = bool(os.getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"))
+        if in_ecs:
+            os.environ.pop("AWS_ACCESS_KEY_ID", None)
+            os.environ.pop("AWS_SECRET_ACCESS_KEY", None)
+            os.environ.pop("AWS_SESSION_TOKEN", None)
+        elif self.aws_access_key and self.aws_secret_key:
             kwargs["aws_access_key_id"] = self.aws_access_key
             kwargs["aws_secret_access_key"] = self.aws_secret_key
         return boto3.Session(**kwargs)
