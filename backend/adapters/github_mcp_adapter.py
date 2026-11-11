@@ -180,3 +180,4 @@ class GitHubMCPAdapter(ICodeRepositoryPort):
             "path": path,
             "message": commit_message
         }
+

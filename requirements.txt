@@ -1,7 +1,7 @@
-fastapi==0.115.11
-uvicorn[standard]==0.34.0
-pydantic==2.10.6
-pydantic-settings==2.8.1
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+pydantic>=2.11.0,<3.0.0
+pydantic-settings>=2.8.0,<3.0.0
 sqlalchemy==2.0.38
 bcrypt==4.3.0
 passlib[bcrypt]==1.7.4
