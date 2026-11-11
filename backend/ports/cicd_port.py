@@ -16,3 +16,4 @@ class ICICDDeploymentPort(Protocol):
     def get_workflow_status(self, run_id: Optional[str] = None) -> Dict[str, Any]:
         """Queries the status and health conclusion of the latest pipeline run."""
         ...
+

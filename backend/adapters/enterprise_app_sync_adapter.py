@@ -31,3 +31,4 @@ class EnterpriseAppSyncAdapter(IEnterpriseAppSyncPort):
         except Exception as e:
             # If server not running locally, return warning without failing
             return {"success": False, "status": "skipped", "reason": str(e)}
+

@@ -16,3 +16,4 @@ class ITicketingPort(Protocol):
     def update_ticket_status(self, ticket_key: str, status_name: str) -> bool:
         """Transitions ticket lifecycle status."""
         ...
+

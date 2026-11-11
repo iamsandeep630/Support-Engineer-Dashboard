@@ -95,3 +95,4 @@ class GitHubActionsAdapter(ICICDDeploymentPort):
             "conclusion": "running",
             "message": "CI/CD Pipeline rolling deployment executing on AWS ECS Fargate."
         }
+

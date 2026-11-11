@@ -124,3 +124,4 @@ class GitHubRepositoryAdapter(ICodeRepositoryPort):
             "path": path,
             "message": commit_message
         }
+

@@ -18,3 +18,4 @@ class JiraCloudDashboardAdapter(ITicketingPort):
 
     def update_ticket_status(self, ticket_key: str, status_name: str) -> bool:
         return self._service.update_ticket_status(ticket_key=ticket_key, status_name=status_name)
+

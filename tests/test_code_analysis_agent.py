@@ -189,6 +189,17 @@ class TestCodeAnalysisAgent(unittest.TestCase):
         # Verify pending action is cleared after deployment
         self.assertIsNone(agent.get_pending_action())
 
+    def test_github_mcp_adapter_conformance(self):
+        """Verify GitHubMCPAdapter satisfies ICodeRepositoryPort interface and local workspace lookup."""
+        from adapters.github_mcp_adapter import GitHubMCPAdapter
+        adapter = GitHubMCPAdapter()
+        self.assertIsInstance(adapter, ICodeRepositoryPort)
+
+        # Test local read via MCP adapter
+        content = adapter.get_file_contents("backend/catalog_config.json")
+        self.assertIsNotNone(content)
+        self.assertIn("4K Webcam Pro", content)
+
 
 if __name__ == "__main__":
     unittest.main()

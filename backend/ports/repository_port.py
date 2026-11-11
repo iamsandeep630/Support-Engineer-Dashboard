@@ -24,3 +24,4 @@ class ICodeRepositoryPort(Protocol):
     def commit_file_change(self, path: str, content: str, commit_message: str) -> Dict[str, Any]:
         """Applies a code change and commits it to the repository."""
         ...
+
