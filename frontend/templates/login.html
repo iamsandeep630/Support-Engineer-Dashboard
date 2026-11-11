@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Meridian Workspace - Sign in</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --primary-light: #dbeafe;
+    --ink-dark: #0f172a;
+    --ink-body: #334155;
+    --ink-muted: #64748b;
+    --border: #e2e8f0;
+    --bg-page: #f8fafc;
+    --danger: #b91c1c;
+    --danger-soft: #fef2f2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-page);
+    background-image: 
+      radial-gradient(#cbd5e1 0.75px, transparent 0.75px),
+      radial-gradient(#cbd5e1 0.75px, var(--bg-page) 0.75px);
+    background-size: 30px 30px;
+    background-position: 0 0, 15px 15px;
+    color: var(--ink-dark);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  /* Brand Header */
+  .brand-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+    text-decoration: none;
+  }
+  .brand-logo {
+    width: 38px;
+    height: 38px;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  }
+  .brand-name {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #1e293b;
+  }
+
+  /* Card Architecture */
+  .login-card {
+    width: 100%;
+    max-width: 375px;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 10px 25px -5px rgba(15,23,42,0.08), 0 4px 6px -2px rgba(15,23,42,0.03);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Top Royal Blue Header Banner */
+  .card-banner {
+    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+    height: 84px;
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    padding: 14px 16px;
+  }
+  .welcome-back-badge {
+    background: rgba(255,255,255,0.18);
+    backdrop-filter: blur(4px);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.25);
+  }
+
+  /* Overlapping Avatar Circle */
+  .avatar-wrapper {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    margin-top: -38px;
+  }
+  .avatar-circle {
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    background: #dbeafe;
+    color: #1e40af;
+    font-size: 26px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 4px solid #ffffff;
+    box-shadow: 0 4px 12px rgba(37,99,235,0.18);
+    letter-spacing: -0.02em;
+  }
+
+  /* Card Body */
+  .card-body {
+    padding: 16px 28px 28px;
+    text-align: center;
+  }
+  .welcome-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 4px;
+  }
+  .welcome-subtitle {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    margin-bottom: 22px;
+  }
+
+  /* Forms & Fields */
+  .field {
+    text-align: left;
+    margin-bottom: 16px;
+  }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13.5px;
+    font-family: inherit;
+    color: #0f172a;
+    transition: all 0.15s ease;
+    background: #ffffff;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+  }
+
+  .password-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .password-wrapper input {
+    padding-right: 38px;
+  }
+  .toggle-pwd {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    transition: color 0.15s ease;
+  }
+  .toggle-pwd:hover {
+    color: #334155;
+  }
+
+  .submit-btn {
+    width: 100%;
+    background: var(--primary);
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 11px 0;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.05s ease;
+    margin-top: 6px;
+  }
+  .submit-btn:hover {
+    background: var(--primary-dark);
+  }
+  .submit-btn:active {
+    transform: scale(0.99);
+  }
+  .submit-btn:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+  }
+
+  .error-banner {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 12.5px;
+    margin-bottom: 16px;
+    text-align: left;
+  }
+
+  /* Footer helpers */
+  .footer-links {
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--ink-muted);
+    text-align: center;
+  }
+  .footer-links a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .footer-links a:hover {
+    text-decoration: underline;
+  }
+
+  .demo-pill {
+    margin-top: 14px;
+    background: #f1f5f9;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11px;
+    color: var(--ink-muted);
+    line-height: 1.45;
+    text-align: left;
+  }
+
+  /* Role Switcher Tabs */
+  .role-toggle-bar {
+    display: flex;
+    background: #f1f5f9;
+    padding: 4px;
+    border-radius: 9px;
+    margin-bottom: 18px;
+    border: 1px solid var(--border);
+    gap: 4px;
+  }
+  .role-toggle-btn {
+    flex: 1;
+    padding: 8px 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .role-toggle-btn.active {
+    background: #ffffff;
+    color: var(--primary);
+    box-shadow: 0 2px 4px rgba(15,23,42,0.08);
+  }
+  .guest-store-cta {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 9px 12px;
+    background: #eff6ff;
+    border-radius: 8px;
+    border: 1px dashed #bfdbfe;
+    width: 100%;
+    transition: background 0.15s ease;
+  }
+  .guest-store-cta:hover {
+    background: #dbeafe;
+    text-decoration: none;
+  }
+</style>
+</head>
+<body>
+
+  <!-- Brand Logo & Title -->
+  <div class="brand-header">
+    <div class="brand-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+      </svg>
+    </div>
+    <span class="brand-name">Meridian</span>
+  </div>
+
+  <!-- Main Login Card (Dual Persona: Customer vs Employee) -->
+  <div class="login-card">
+    <!-- Blue Banner with dynamic tag -->
+    <div class="card-banner">
+      <span class="welcome-back-badge" id="bannerBadge">Customer Store</span>
+    </div>
+
+    <!-- Centered Overlapping Avatar Circle -->
+    <div class="avatar-wrapper">
+      <div class="avatar-circle" id="roleAvatar">🛍️</div>
+    </div>
+
+    <!-- Card Content -->
+    <div class="card-body">
+      <!-- Role Toggle Bar -->
+      <div class="role-toggle-bar">
+        <button type="button" class="role-toggle-btn active" id="tabCustomer" onclick="selectRole('customer')">
+          <span>🛍️ Customer</span>
+        </button>
+        <button type="button" class="role-toggle-btn" id="tabEmployee" onclick="selectRole('employee')">
+          <span>💼 Employee</span>
+        </button>
+      </div>
+
+      <h2 class="welcome-title" id="loginTitle">Customer Sign In</h2>
+      <p class="welcome-subtitle" id="loginSubtitle">Sign in to track orders, saved items, and checkout.</p>
+
+      <div id="errorBanner"></div>
+
+      <div class="field">
+        <label>Username / Email</label>
+        <input type="text" id="email" value="customer@meridian.com" placeholder="e.g. customer@meridian.com or employee@meridian.com" />
+      </div>
+
+      <div class="field">
+        <label>Password</label>
+        <div class="password-wrapper">
+          <input type="password" id="password" value="password123" placeholder="••••••••" />
+          <button type="button" class="toggle-pwd" id="togglePwdBtn" title="Show/hide password">
+            <svg id="eyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button class="submit-btn" id="submitBtn">Sign In</button>
+
+      <a href="customer_store.html" class="guest-store-cta" id="guestStoreCta">
+        <span>🛍️</span>
+        <span>Browse Products as Guest (No Sign-In Required) →</span>
+      </a>
+    </div>
+  </div>
+
+
+
+<script>
+  const API_BASE = "http://localhost:8001";
+
+  const emailInput = document.getElementById("email");
+  const passwordInput = document.getElementById("password");
+  const submitBtn = document.getElementById("submitBtn");
+  const errorBanner = document.getElementById("errorBanner");
+  const togglePwdBtn = document.getElementById("togglePwdBtn");
+  const tabCustomer = document.getElementById("tabCustomer");
+  const tabEmployee = document.getElementById("tabEmployee");
+  const roleAvatar = document.getElementById("roleAvatar");
+  const loginTitle = document.getElementById("loginTitle");
+  const loginSubtitle = document.getElementById("loginSubtitle");
+  const bannerBadge = document.getElementById("bannerBadge");
+  const guestStoreCta = document.getElementById("guestStoreCta");
+
+  function selectRole(role) {
+    if (role === 'customer') {
+      tabCustomer.classList.add("active");
+      tabEmployee.classList.remove("active");
+      roleAvatar.textContent = "🛍️";
+      roleAvatar.style.fontSize = "28px";
+      loginTitle.textContent = "Customer Sign In";
+      loginSubtitle.textContent = "Sign in to track orders, saved items, and checkout.";
+      bannerBadge.textContent = "Customer Store";
+      emailInput.value = "customer@meridian.com";
+      passwordInput.value = "password123";
+      guestStoreCta.style.display = "flex";
+    } else {
+      tabEmployee.classList.add("active");
+      tabCustomer.classList.remove("active");
+      roleAvatar.textContent = "💼";
+      roleAvatar.style.fontSize = "26px";
+      loginTitle.textContent = "Employee Sign In";
+      loginSubtitle.textContent = "Sign in to your Operations & Finance Workspace.";
+      bannerBadge.textContent = "Employee Workspace";
+      emailInput.value = "employee@meridian.com";
+      passwordInput.value = "password123";
+      guestStoreCta.style.display = "none";
+    }
+    errorBanner.innerHTML = "";
+  }
+
+  // Check URL query param for default selection (?role=employee or ?role=customer)
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("role") === "employee") {
+    selectRole("employee");
+  } else {
+    selectRole("customer");
+  }
+
+  // Toggle password visibility
+  togglePwdBtn.addEventListener("click", () => {
+    const isPassword = passwordInput.type === "password";
+    passwordInput.type = isPassword ? "text" : "password";
+    togglePwdBtn.style.color = isPassword ? "#2563eb" : "#94a3b8";
+  });
+
+  function showError(message) {
+    errorBanner.innerHTML = `<div class="error-banner">${message}</div>`;
+  }
+
+  async function handleSubmit() {
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    errorBanner.innerHTML = "";
+
+    if (!email || !password) {
+      showError("Please enter both username/email and password.");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Signing in...";
+
+    try {
+      const res = await fetch(API_BASE + "/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError(data.detail || "Invalid credentials.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Sign In";
+        return;
+      }
+
+      // Store tokens
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("customer_token", data.access_token);
+      localStorage.setItem("customer_email", email);
+      localStorage.setItem("shopmart_token", data.access_token);
+      localStorage.setItem("shopmart_email", email);
+      if (data.role) {
+        localStorage.setItem("user_role", data.role);
+      }
+
+      console.log("Login success! User role:", data.role);
+      window.location.replace("support_dashboard.html");
+    } catch (err) {
+      showError("Couldn't reach backend server at " + API_BASE);
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Sign In";
+    }
+  }
+
+  submitBtn.addEventListener("click", handleSubmit);
+  passwordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") handleSubmit(); });
+  emailInput.addEventListener("keydown", (e) => { if (e.key === "Enter") handleSubmit(); });
+</script>
+
+</body>
+</html>
