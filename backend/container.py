@@ -34,7 +34,7 @@ class Container:
         _repository_port: ICodeRepositoryPort = GitHubRepositoryAdapter(owner=_owner, repo=_repo, token=_token)
 
     _cicd_port: ICICDDeploymentPort = GitHubActionsAdapter(owner=_owner, repo=_repo, token=_token)
-    _catalog_sync_port: IEnterpriseAppSyncPort = EnterpriseAppSyncAdapter()
+    _catalog_sync_port: IEnterpriseAppSyncPort = EnterpriseAppSyncAdapter(base_url=os.getenv("ENTERPRISE_APP_URL", "http://localhost:8001"))
     _ticketing_port: ITicketingPort = JiraCloudDashboardAdapter()
 
     @classmethod

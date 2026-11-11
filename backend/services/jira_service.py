@@ -171,6 +171,11 @@ def list_jira_tickets(limit: int = 50) -> list[dict]:
                             conv_id = sess_match.group(1)
                             chat_link = f"{ENTERPRISE_APP_URL}/support/chat/{conv_id}"
 
+                    # Normalize localhost chat_link to configured ENTERPRISE_APP_URL if remote
+                    if chat_link and ("localhost:8001" in chat_link or "127.0.0.1:8001" in chat_link):
+                        if ENTERPRISE_APP_URL and "localhost" not in ENTERPRISE_APP_URL:
+                            chat_link = re.sub(r"https?://(localhost|127\.0\.0\.1):8001", ENTERPRISE_APP_URL, chat_link)
+
                     # Calculate expiry if remote_link exists
                     expires_at = None
                     if remote_link:
