@@ -2096,6 +2096,8 @@
       container.scrollTop = container.scrollHeight;
 
       let reply = "";
+      let requiresApproval = false;
+      let stage = "";
       try {
         const res = await fetch('/api/agents/analyze-code', {
           method: 'POST',
@@ -2105,6 +2107,8 @@
         if (res.ok) {
           const data = await res.json();
           reply = data.response || "";
+          requiresApproval = !!data.requires_approval;
+          stage = data.stage || "";
         }
       } catch (err) {
         console.warn("Backend CAA API call failed:", err);
@@ -2120,6 +2124,25 @@
 
       let formattedReply = formatCaaMarkdown(reply);
 
+      // Two-Stage Human-in-the-Loop (HITL) Gate Action Banner
+      let hitlBanner = "";
+      if (requiresApproval || stage === "STAGE_1_INVESTIGATION" || reply.includes("[ACTION_REQUIRED")) {
+        hitlBanner = `
+          <div class="hitl-gate-container" style="margin-top:14px; padding:12px 16px; background:linear-gradient(135deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6)); border:1px solid #3b82f6; border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:18px;">🛡️</span>
+              <div>
+                <div style="font-size:12.5px; font-weight:700; color:#93c5fd;">Autonomous Agent HITL Approval Gate</div>
+                <div style="font-size:11.5px; color:#cbd5e1;">Review proposed diff above before deploying to AWS ECS Fargate</div>
+              </div>
+            </div>
+            <button type="button" onclick="approveAndDeployFix(this)" class="btn-hitl-approve" style="background:#2563eb; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow: 0 2px 6px rgba(37,99,235,0.4);">
+              <span>🚀 Approve & Deploy to ECS Fargate</span>
+            </button>
+          </div>
+        `;
+      }
+
       container.innerHTML += `
         <div class="caa-message caa-agent">
           <div class="caa-avatar">
@@ -2128,9 +2151,23 @@
               <polyline points="8 6 2 12 8 18"/>
             </svg>
           </div>
-          <div class="caa-bubble">${formattedReply}</div>
+          <div class="caa-bubble">
+            ${formattedReply}
+            ${hitlBanner}
+          </div>
         </div>`;
       container.scrollTop = container.scrollHeight;
+    }
+
+    async function approveAndDeployFix(btn) {
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳ Dispatching CI/CD to ECS Fargate...</span>';
+        btn.style.opacity = '0.7';
+      }
+      const input = document.getElementById('caaInput');
+      if (input) input.value = 'Approve and deploy fix to AWS ECS Fargate';
+      await sendCaaMsg();
     }
 
     // ─── Initialize ────────────────────────────────────────────────────────
