@@ -28,6 +28,12 @@ WORKSPACE_DIR = BASE_DIR.parent
 ENTERPRISE_APP_DIR = WORKSPACE_DIR / "Meridian Enterprise Application"
 
 # Exposed tools for Code Analysis Agent
+ALLOWED_READ_TOOLS = [
+    "get_file_contents",
+    "search_code",
+    "list_commits"
+]
+
 ALLOWED_TOOLS = [
     "get_file_contents",
     "search_code",
@@ -214,6 +220,13 @@ class CodeAnalysisAgent:
         2. Applies required code changes when prompted.
         3. Dispatches GitHub Actions CI/CD pipeline for ECS Fargate deployment.
         """
+        if not self.github_token:
+            return (
+                "### ⚠️ GitHub Authentication Warning\n\n"
+                "The `GITHUB_PERSONAL_ACCESS_TOKEN` is not configured in the environment. "
+                "Please provide a valid GitHub PAT with repository permissions to allow the Code Analysis Agent to investigate and patch code."
+            )
+
         # Define Strands tools
         @tool
         async def get_file_contents(path: str, owner: str = "", repo: str = "") -> str:
@@ -368,7 +381,7 @@ class CodeAnalysisAgent:
         """Deterministic, domain-aware senior engineering handler for common operational scenarios."""
         p_low = prompt.lower()
 
-        # Check if Alex is confirming/prompting to fix and deploy
+        # Check if the Support Engineer is confirming/prompting to fix and deploy
         fix_intent_keywords = [
             "fix", "apply", "go ahead", "proceed", "deploy", "run ci", "run cicd",
             "execute", "commit", "push", "make the change", "update"
@@ -376,7 +389,7 @@ class CodeAnalysisAgent:
         is_fix_prompt = any(w in p_low for w in fix_intent_keywords) and not ("investigate" in p_low or "look into" in p_low or "check" in p_low or "diagnose" in p_low)
 
         # ----------------------------------------------------------------------
-        # SCENARIO 1: Dropdown not showing products (e.g. 4K Webcam Pro)
+        # DEFECT CATEGORY 1: Dropdown not showing products (e.g. 4K Webcam Pro)
         # ----------------------------------------------------------------------
         if "dropdown" in p_low or "4k webcam" in p_low or "catalog" in p_low:
             if is_fix_prompt or ("fix" in p_low and "deploy" in p_low):
@@ -408,7 +421,7 @@ class CodeAnalysisAgent:
                     "  2. 🐳 **Docker Build**: Packaged `meridian-enterprise-app:latest` container.\n"
                     "  3. 📦 **Amazon ECR**: Pushed image to `317492541707.dkr.ecr.us-east-1.amazonaws.com/meridian-enterprise-backend`.\n"
                     "  4. 🚀 **AWS ECS Fargate**: Deployed new task definition to cluster `meridian-cluster`, service `meridian-enterprise-service`.\n\n"
-                    "> 💡 *Alex, the changes are now deploying to AWS ECS Fargate and will reflect in production within minutes. You can update Maya in the live chat that the 4K Webcam Pro is available in the invoicing dropdown.*"
+                    "> 💡 *The changes are now deploying to AWS ECS Fargate and will reflect in production within minutes. You can notify the employee in the live chat that the 4K Webcam Pro is available in the invoicing dropdown.*"
                 )
             else:
                 # Investigation Response
@@ -451,7 +464,7 @@ class CodeAnalysisAgent:
                 )
 
         # ----------------------------------------------------------------------
-        # SCENARIO 2: Invoice Checkbox Not Getting Ticked
+        # DEFECT CATEGORY 2: Invoice Checkbox Not Getting Ticked
         # ----------------------------------------------------------------------
         if "checkbox" in p_low or "check box" in p_low or "tick" in p_low:
             if is_fix_prompt or ("fix" in p_low and "deploy" in p_low):
@@ -476,7 +489,7 @@ class CodeAnalysisAgent:
                     "  2. 🐳 **Docker Build**: Built frontend/backend container image.\n"
                     "  3. 📦 **Amazon ECR**: Pushed tagged image to AWS ECR repository.\n"
                     "  4. 🚀 **AWS ECS Fargate**: Deployed to cluster `meridian-cluster`, service `meridian-enterprise-service`.\n\n"
-                    "> 💡 *Alex, the checkbox fix has been committed and the CI/CD pipeline is deploying to AWS ECS Fargate. The functionality will be fully operational in production within minutes.*"
+                    "> 💡 *The checkbox fix has been committed and the CI/CD pipeline is deploying to AWS ECS Fargate. The functionality will be fully operational in production within minutes.*"
                 )
             else:
                 return (
@@ -494,11 +507,11 @@ class CodeAnalysisAgent:
                     "and remove any disabling attributes during draft editing.\n\n"
                     "**4. Deployment Plan (AWS ECS Fargate):**\n"
                     "Once approved, I will commit this fix to `main` and trigger the GitHub Actions CI/CD deployment pipeline to build and push the new container image to Amazon ECR and update the ECS Fargate service.\n\n"
-                    "🚀 **Alex, please confirm if you would like me to apply this code fix, commit to the repository, and trigger the GitHub Actions CI/CD deployment pipeline to AWS ECS Fargate.**"
+                    "🚀 **Please confirm if you would like me to apply this code fix, commit to the repository, and trigger the GitHub Actions CI/CD deployment pipeline to AWS ECS Fargate.**"
                 )
 
         # ----------------------------------------------------------------------
-        # SCENARIO 3: Currency Tax Aggregation Crash (Scenario 6)
+        # DEFECT CATEGORY 3: Multi-Currency Tax Aggregation & Financial Reporting
         # ----------------------------------------------------------------------
         if "currency tax" in p_low or "aggregation" in p_low or "reconciliation" in p_low:
             return (
@@ -516,9 +529,9 @@ class CodeAnalysisAgent:
                 "• Phase 3: Frontend Reconciliation View & Formatting = 1 Business Day\n"
                 "• Phase 4: Integration QA, Financial Regression & ECS Deployment = 1 Business Day\n"
                 "• **TOTAL ESTIMATED TIMELINE: 4 Business Days**\n\n"
-                "💡 **Recommendation for Support Engineer Alex Turner:**\n"
-                "Alex, please review these technical findings and the 4-day estimation against current sprint capacity. "
-                "Once validated, you can personally message Maya in the live chat with the confirmed 4-day ETA. The Jira ticket will remain open as the system of record."
+                "💡 **Recommendation for Support Engineer:**\n"
+                "Please review these technical findings and the 4-day estimation against current sprint capacity. "
+                "Once validated, you can message the user in the live chat with the confirmed 4-day ETA. The Jira ticket will remain open as the system of record."
             )
 
         # Generic Diagnostic Response

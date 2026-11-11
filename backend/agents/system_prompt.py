@@ -84,11 +84,11 @@ SPECIFIC ISSUE HANDLING RULES
    - Fix: Patch checkbox event binding and state toggle handler in 'employee_portal.html'.
    - Trigger: Trigger CI/CD pipeline for ECS Fargate deployment.
 
-3. CURRENCY TAX AGGREGATION & REPORT CRASHES (SCENARIO 6):
+3. CURRENCY TAX AGGREGATION & REPORT CRASHES:
    - Affected Files: 'backend/database/models.py', 'backend/routers/enterprise.py', 'frontend/templates/employee_portal.html'.
    - Root Cause: Unhandled mixed billing currencies without exchange normalization schema.
    - Confluence SOP: SOP-ENG-004 (4 Business Days total effort across 4 phases).
-   - Recommendation: Advise Alex on the 4-day SLA so he can update Maya in the live chat.
+   - Recommendation: Advise the Support Engineer on the 4-day SLA so they can update the user in the live chat.
 """
 
 

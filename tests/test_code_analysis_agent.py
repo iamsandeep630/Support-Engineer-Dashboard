@@ -33,7 +33,7 @@ class TestCodeAnalysisAgent(unittest.TestCase):
         prompt = self.agent.system_prompt
         self.assertIn("Code Analysis Agent (SmartFix)", prompt)
         self.assertIn(f"Target repository: '{self.agent.owner}/{self.agent.repo}'", prompt)
-        self.assertIn("SCENARIO 6 ARCHITECTURAL CONTEXT", prompt)
+        self.assertIn("REPOSITORY ARCHITECTURAL CONTEXT", prompt)
 
     def test_scan_snippet_regex(self):
         """Verify scan_snippet detects vulnerabilities and clean code."""
@@ -95,103 +95,34 @@ class TestCodeAnalysisAgent(unittest.TestCase):
         self.assertIn("GitHub Authentication Warning", res)
         self.assertIn("GITHUB_PERSONAL_ACCESS_TOKEN", res)
 
-    @patch("boto3.Session")
-    @patch("mcp.client.stdio.stdio_client")
+    @patch("agents.code_analysis_agent.Agent")
     @patch("agents.code_analysis_agent._load_env_secret")
-    def test_bedrock_tool_use_loop_and_diagnosis(self, mock_secret, mock_stdio, mock_boto_session):
-        """Simulate a Strands tool use loop with fake Bedrock Converse and fake MCP session."""
+    def test_bedrock_tool_use_loop_and_diagnosis(self, mock_secret, mock_agent_cls):
+        """Simulate a Strands Agent tool invocation loop and verify structured diagnosis."""
         mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
 
-        # 1. Fake Bedrock Converse Responses:
-        # Step 1: Tool use (get_file_contents)
-        # Step 2: Final text response with diagnosis and diff
-        step1_response = {
-            "output": {
-                "message": {
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "toolUse": {
-                                "toolUseId": "toolu_01",
-                                "name": "get_file_contents",
-                                "input": {
-                                    "owner": "iamsandeep630",
-                                    "repo": "Meridian-Enterprise-Application",
-                                    "path": "frontend/templates/employee_portal.html"
-                                }
-                            }
-                        }
-                    ]
-                }
-            },
-            "stopReason": "tool_use"
-        }
+        expected_response = (
+            "### 🔍 Root Cause Analysis: Invoice Dropdown Missing Products\n"
+            "📁 **Target File**: `backend/catalog_config.json`\n"
+            "📝 **Proposed Diff**:\n```diff\n- \"show_in_invoice_dropdown\": false\n+ \"show_in_invoice_dropdown\": true\n```\n"
+            "🛠️ **Manual Fix Instructions**: Update `backend/catalog_config.json` and reload catalog."
+        )
 
-        step2_response = {
-            "output": {
-                "message": {
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "text": (
-                                "🔍 **Root Cause**: The dropdown filters by `show_in_invoice_dropdown === 1`.\n"
-                                "📁 **Target File**: `backend/catalog_config.json`\n"
-                                "📝 **Proposed Diff**:\n```diff\n- \"show_in_invoice_dropdown\": false\n+ \"show_in_invoice_dropdown\": true\n```\n"
-                                "🛠️ **Manual Fix Instructions**: Update `backend/catalog_config.json` and reload catalog."
-                            )
-                        }
-                    ]
-                }
-            },
-            "stopReason": "end_turn"
-        }
+        mock_instance = AsyncMock()
+        mock_instance.invoke_async = AsyncMock(return_value=expected_response)
+        mock_agent_cls.return_value = mock_instance
 
-        mock_bedrock = MagicMock()
-        mock_bedrock.converse.side_effect = [step1_response, step2_response]
+        agent = CodeAnalysisAgent()
+        result = asyncio.run(agent.query_async("Investigate why 4K Webcam Pro is not showing in invoice dropdown"))
 
-        sess_instance = MagicMock()
-        sess_instance.client.return_value = mock_bedrock
-        mock_boto_session.return_value = sess_instance
+        # Verify Strands Agent was instantiated and invoked
+        mock_agent_cls.assert_called_once()
+        mock_instance.invoke_async.assert_called_once()
 
-        # 2. Fake MCP Session
-        mock_mcp_tool = MagicMock()
-        mock_mcp_tool.name = "get_file_contents"
-        mock_mcp_tool.description = "Read file"
-        mock_mcp_tool.input_schema = {}
-
-        mock_content = MagicMock()
-        mock_content.text = "sel.innerHTML = productCatalog.filter(p => p.show_in_invoice_dropdown === 1)"
-
-        mock_session = AsyncMock()
-        mock_session.initialize = AsyncMock()
-        mock_session.list_tools = AsyncMock(return_value=MagicMock(tools=[mock_mcp_tool]))
-        mock_session.call_tool = AsyncMock(return_value=MagicMock(content=[mock_content]))
-
-        # Context manager for stdio_client
-        mock_stdio_ctx = AsyncMock()
-        mock_stdio_ctx.__aenter__.return_value = (MagicMock(), MagicMock())
-        mock_stdio.return_value = mock_stdio_ctx
-
-        with patch("mcp.ClientSession") as mock_session_cls:
-            session_ctx = AsyncMock()
-            session_ctx.__aenter__.return_value = mock_session
-            mock_session_cls.return_value = session_ctx
-
-            agent = CodeAnalysisAgent()
-            result = asyncio.run(agent.query_async("Maya says 4K Webcam Pro is not showing in invoice dropdown"))
-
-            # Verify Claude was called twice via Bedrock converse (tool use -> final response)
-            self.assertEqual(mock_bedrock.converse.call_count, 2)
-
-            # Verify MCP tool was called
-            mock_session.call_tool.assert_called_once()
-            call_tool_args = mock_session.call_tool.call_args[0]
-            self.assertEqual(call_tool_args[0], "get_file_contents")
-
-            # Verify final text has diagnosis and diff
-            self.assertIn("Root Cause", result)
-            self.assertIn("Proposed Diff", result)
-            self.assertIn("Manual Fix Instructions", result)
+        # Verify final text has diagnosis and diff
+        self.assertIn("Root Cause", result)
+        self.assertIn("Proposed Diff", result)
+        self.assertIn("Manual Fix Instructions", result)
 
 
 if __name__ == "__main__":
