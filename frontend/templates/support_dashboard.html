@@ -1766,7 +1766,8 @@
       let chatUrl = t.chatLink || '';
       if (!chatUrl || chatUrl.startsWith('/')) {
         const cid = t.conversationId || t.id || '1';
-        chatUrl = `http://localhost:8001/support/chat/${cid}`;
+        const defaultBase = window.ENTERPRISE_APP_URL || (window.location.port === '8002' ? window.location.origin.replace(':8002', ':8001') : window.location.origin);
+        chatUrl = chatUrl ? `${defaultBase}${chatUrl}` : `${defaultBase}/support/chat/${cid}`;
       }
 
       return `
