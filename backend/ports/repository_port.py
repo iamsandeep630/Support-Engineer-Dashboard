@@ -9,11 +9,15 @@ from typing import Protocol, runtime_checkable, Optional, Dict, Any, List
 class ICodeRepositoryPort(Protocol):
     """Outbound port for code inspection and Git commits."""
 
+    def list_directory(self, path: str = "") -> List[Dict[str, Any]]:
+        """Lists directory contents (files and folders) in the repository."""
+        ...
+
     def get_file_contents(self, path: str) -> Optional[str]:
         """Fetches the raw text content of a file in the repository."""
         ...
 
-    def search_code(self, query: str) -> Dict[str, Any]:
+    def search_code(self, query: str, path_filter: Optional[str] = None) -> Dict[str, Any]:
         """Searches symbols and text across the repository codebase."""
         ...
 

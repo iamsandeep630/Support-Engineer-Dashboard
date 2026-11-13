@@ -2072,10 +2072,15 @@
       return formatted;
     }
 
+    let caaSessionId = "caa-session-" + Date.now();
+    let caaHistory = [];
+
     async function sendCaaMsg() {
       const input = document.getElementById('caaInput');
       const text = input.value.trim();
       if (!text) return;
+
+      caaHistory.push({ role: 'user', content: text });
 
       const container = document.getElementById('caaMessages');
       container.innerHTML += `
@@ -2095,7 +2100,7 @@
             </svg>
           </div>
           <div class="caa-bubble" style="opacity:0.85; font-style:italic;">
-            🔍 Investigating repository code via GitHub MCP Server...
+            🔍 Inspecting repository code & symbols...
           </div>
         </div>`;
       container.scrollTop = container.scrollHeight;
@@ -2107,13 +2112,16 @@
         const res = await fetch('/api/agents/analyze-code', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: text })
+          body: JSON.stringify({ prompt: text, session_id: caaSessionId, history: caaHistory })
         });
         if (res.ok) {
           const data = await res.json();
           reply = data.response || "";
           requiresApproval = !!data.requires_approval;
           stage = data.stage || "";
+          if (reply) {
+            caaHistory.push({ role: 'assistant', content: reply });
+          }
         }
       } catch (err) {
         console.warn("Backend CAA API call failed:", err);

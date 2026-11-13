@@ -1,0 +1,69 @@
+{
+  "family": "meridian-support-task",
+  "taskRoleArn": "arn:aws:iam::317492541707:role/ai-mesh-fargate-task-role",
+  "executionRoleArn": "arn:aws:iam::317492541707:role/ecsTaskExecutionRole",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "meridian-support-app",
+      "image": "317492541707.dkr.ecr.us-east-1.amazonaws.com/meridian-support-dashboard:latest",
+      "cpu": 0,
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 443,
+          "hostPort": 443,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "SUPPORT_PORT",
+          "value": "80"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "ap-south-1"
+        },
+        {
+          "name": "HOST",
+          "value": "0.0.0.0"
+        },
+        {
+          "name": "JIRA_PROJECT_KEY",
+          "value": "SCRUM"
+        },
+        {
+          "name": "JIRA_INSTANCE_URL",
+          "value": "https://iamsandeep630.atlassian.net"
+        },
+        {
+          "name": "GITHUB_REPO",
+          "value": "iamsandeep630/Meridian-Enterprise-Application"
+        },
+        {
+          "name": "BEDROCK_MODEL_ID",
+          "value": "anthropic.claude-3-sonnet-20240229-v1:0"
+        },
+        {
+          "name": "ENTERPRISE_APP_URL",
+          "value": "http://localhost:8001"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/meridian-support-app",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
+

@@ -13,11 +13,10 @@ from ports.cicd_port import ICICDDeploymentPort
 from ports.catalog_sync_port import IEnterpriseAppSyncPort
 from ports.ticketing_port import ITicketingPort
 
-from adapters.github_repository_adapter import GitHubRepositoryAdapter
-from adapters.github_mcp_adapter import GitHubMCPAdapter
-from adapters.github_actions_adapter import GitHubActionsAdapter
-from adapters.enterprise_app_sync_adapter import EnterpriseAppSyncAdapter
-from adapters.jira_cloud_adapter import JiraCloudDashboardAdapter
+from adapters.repository_adapters import GitHubRepositoryAdapter, GitHubMCPAdapter
+from adapters.cicd_adapters import GitHubActionsAdapter, AWSCodePipelineAdapter
+from adapters.catalog_sync_adapters import EnterpriseAppSyncAdapter
+from adapters.ticketing_adapters import JiraCloudDashboardAdapter
 
 
 class Container:
@@ -26,14 +25,26 @@ class Container:
     _token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN") or os.getenv("GITHUB_PAT") or os.getenv("GITHUB_TOKEN") or ""
     _owner = "iamsandeep630"
     _repo = "Meridian-Enterprise-Application"
-    _use_mcp = os.getenv("USE_GITHUB_MCP", "false").lower() in ["1", "true", "yes"]
+    # Default to True so GitHub MCP is the primary adapter for Code Analysis Agent
+    _use_mcp = os.getenv("USE_GITHUB_MCP", "true").lower() in ["1", "true", "yes"]
 
     if _use_mcp:
         _repository_port: ICodeRepositoryPort = GitHubMCPAdapter(owner=_owner, repo=_repo, token=_token)
     else:
         _repository_port: ICodeRepositoryPort = GitHubRepositoryAdapter(owner=_owner, repo=_repo, token=_token)
 
-    _cicd_port: ICICDDeploymentPort = GitHubActionsAdapter(owner=_owner, repo=_repo, token=_token)
+    # CI/CD Deployment Port Provider: GitHub Actions (default) or AWS CodePipeline
+    _cicd_provider = os.getenv("CICD_PROVIDER", "github_actions").lower()
+    _use_aws_pipeline = _cicd_provider in ["aws", "codepipeline", "aws_codepipeline"] or os.getenv("USE_AWS_CODEPIPELINE", "false").lower() in ["1", "true", "yes"]
+
+    if _use_aws_pipeline:
+        _cicd_port: ICICDDeploymentPort = AWSCodePipelineAdapter(
+            pipeline_name=os.getenv("AWS_CODEPIPELINE_NAME", "meridian-enterprise-pipeline"),
+            region_name=os.getenv("AWS_DEPLOY_REGION") or os.getenv("AWS_REGION") or "us-east-1"
+        )
+    else:
+        _cicd_port: ICICDDeploymentPort = GitHubActionsAdapter(owner=_owner, repo=_repo, token=_token)
+
     _catalog_sync_port: IEnterpriseAppSyncPort = EnterpriseAppSyncAdapter(base_url=os.getenv("ENTERPRISE_APP_URL", "http://localhost:8001"))
     _ticketing_port: ITicketingPort = JiraCloudDashboardAdapter()
 
@@ -48,6 +59,10 @@ class Container:
     @classmethod
     def get_cicd_port(cls) -> ICICDDeploymentPort:
         return cls._cicd_port
+
+    @classmethod
+    def set_cicd_port(cls, port: ICICDDeploymentPort) -> None:
+        cls._cicd_port = port
 
     @classmethod
     def get_catalog_sync_port(cls) -> IEnterpriseAppSyncPort:

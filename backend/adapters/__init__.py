@@ -1,16 +1,23 @@
 """
 Adapters Package - Hexagonal Architecture Secondary Adapters for Support Engineer Dashboard.
+Organized into port-specific adapter sub-packages for modularity, clean boundaries, and easy extension.
+
+Sub-packages:
+- cicd_adapters: GitHubActionsAdapter, AWSCodePipelineAdapter (implements ICICDDeploymentPort)
+- repository_adapters: GitHubRepositoryAdapter, GitHubMCPAdapter (implements ICodeRepositoryPort)
+- ticketing_adapters: JiraCloudDashboardAdapter (implements ITicketingPort)
+- catalog_sync_adapters: EnterpriseAppSyncAdapter (implements IEnterpriseAppSyncPort)
 """
-from adapters.github_repository_adapter import GitHubRepositoryAdapter
-from adapters.github_mcp_adapter import GitHubMCPAdapter
-from adapters.github_actions_adapter import GitHubActionsAdapter
-from adapters.enterprise_app_sync_adapter import EnterpriseAppSyncAdapter
-from adapters.jira_cloud_adapter import JiraCloudDashboardAdapter
+from adapters.repository_adapters import GitHubRepositoryAdapter, GitHubMCPAdapter
+from adapters.cicd_adapters import GitHubActionsAdapter, AWSCodePipelineAdapter
+from adapters.ticketing_adapters import JiraCloudDashboardAdapter
+from adapters.catalog_sync_adapters import EnterpriseAppSyncAdapter
 
 __all__ = [
     "GitHubRepositoryAdapter",
     "GitHubMCPAdapter",
     "GitHubActionsAdapter",
-    "EnterpriseAppSyncAdapter",
-    "JiraCloudDashboardAdapter"
+    "AWSCodePipelineAdapter",
+    "JiraCloudDashboardAdapter",
+    "EnterpriseAppSyncAdapter"
 ]

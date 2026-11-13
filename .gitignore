@@ -40,11 +40,10 @@ venv.bak/
 *.env.local
 *.env.*.local
 
-# SQLite Databases & Local Storage
-*.db
-*.db-journal
-*.sqlite3
-data/*.db
+# Runtime Data & Storage
+data/*
+!data/cache/
+!data/cache/.gitkeep
 
 # Knowledge Base Built Artifacts (Regenerable)
 knowledge_base/data/knowledge.index

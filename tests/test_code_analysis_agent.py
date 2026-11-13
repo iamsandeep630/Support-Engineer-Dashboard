@@ -191,7 +191,7 @@ class TestCodeAnalysisAgent(unittest.TestCase):
 
     def test_github_mcp_adapter_conformance(self):
         """Verify GitHubMCPAdapter satisfies ICodeRepositoryPort interface and local workspace lookup."""
-        from adapters.github_mcp_adapter import GitHubMCPAdapter
+        from adapters.repository_adapters import GitHubMCPAdapter
         adapter = GitHubMCPAdapter()
         self.assertIsInstance(adapter, ICodeRepositoryPort)
 
@@ -199,6 +199,54 @@ class TestCodeAnalysisAgent(unittest.TestCase):
         content = adapter.get_file_contents("backend/catalog_config.json")
         self.assertIsNotNone(content)
         self.assertIn("4K Webcam Pro", content)
+
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_navigation_device_connection_lookup(self, mock_secret, mock_agent):
+        """Verify agent locates device connection function in meshcentral_service without hallucinating tax reports."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+        agent = CodeAnalysisAgent()
+
+        query = "Can you display me the function responsible for checking device connection?"
+        res = asyncio.run(agent.query_async(query))
+
+        # Must find the real ground-truth function in meshcentral_service.py
+        self.assertIn("backend/services/meshcentral_service.py", res)
+        self.assertIn("list_managed_devices", res)
+        # Must NOT hallucinate generate_tax_report or tax diffs
+        self.assertNotIn("generate_tax_report", res)
+        self.assertNotIn("tax_data", res)
+        # Navigation should not require approval gate
+        self.assertIsNone(agent.get_pending_action())
+
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_multiturn_context_in_services_followup(self, mock_secret, mock_agent):
+        """Verify multi-turn follow up preserves context and searches services correctly."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+        agent = CodeAnalysisAgent()
+
+        history = [
+            {"role": "user", "content": "Can you display me the function responsible for checking device connection?"},
+            {"role": "assistant", "content": "Looking into backend services..."}
+        ]
+
+        # Follow-up message from Alex
+        follow_up = "It will be within services. please check thoroughly"
+        res = asyncio.run(agent.query_async(follow_up, session_id="alex-turner-1", history=history))
+
+        self.assertIn("backend/services/meshcentral_service.py", res)
+        self.assertIn("list_managed_devices", res)
+        self.assertNotIn("generate_tax_report", res)
+        self.assertNotIn("currency tax", res.lower())
+
+    def test_repository_port_list_directory(self):
+        """Verify ICodeRepositoryPort lists directories and files correctly."""
+        services = self.agent.repo_port.list_directory("backend/services")
+        names = [s["name"] for s in services]
+        self.assertIn("meshcentral_service.py", names)
+        self.assertIn("jira_service.py", names)
+        self.assertIn("escalation_service.py", names)
 
 
 if __name__ == "__main__":

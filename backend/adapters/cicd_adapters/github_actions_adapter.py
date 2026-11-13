@@ -1,6 +1,7 @@
 """
 GitHub Actions CI/CD Deployment Secondary Adapter
-Implements ICICDDeploymentPort to trigger ECS Fargate deployments and inspect build statuses.
+Implements ICICDDeploymentPort to trigger EC2 deployments and inspect build statuses
+for Meridian Enterprise Application.
 """
 import os
 import json
@@ -11,7 +12,7 @@ from ports.cicd_port import ICICDDeploymentPort
 
 
 class GitHubActionsAdapter(ICICDDeploymentPort):
-    """Adapter for GitHub Actions workflows targeting AWS ECS Fargate."""
+    """Adapter for GitHub Actions workflows targeting Meridian Enterprise Application on AWS EC2."""
 
     def __init__(self, owner: str = "iamsandeep630", repo: str = "Meridian-Enterprise-Application", token: str = ""):
         self.owner = owner
@@ -42,7 +43,7 @@ class GitHubActionsAdapter(ICICDDeploymentPort):
         except Exception as e:
             return {"error": str(e)}
 
-    def trigger_workflow(self, workflow_file: str, ref: str = "main", environment: str = "production") -> Dict[str, Any]:
+    def trigger_workflow(self, workflow_file: str = "deploy-ec2.yml", ref: str = "main", environment: str = "production") -> Dict[str, Any]:
         payload = {
             "ref": ref,
             "inputs": {
@@ -54,7 +55,7 @@ class GitHubActionsAdapter(ICICDDeploymentPort):
 
         # In testing or when workflow is dispatched, inspect latest run
         run_res = self._http_request("actions/runs?per_page=1")
-        run_id = "run-ecs-fargate-active"
+        run_id = "run-ec2-active"
         if isinstance(run_res, dict) and run_res.get("workflow_runs"):
             run_id = str(run_res["workflow_runs"][0].get("id", run_id))
 
@@ -64,8 +65,8 @@ class GitHubActionsAdapter(ICICDDeploymentPort):
             "ref": ref,
             "environment": environment,
             "run_id": run_id,
-            "target": "AWS ECS Fargate ('meridian-cluster' / 'meridian-enterprise-service')",
-            "image_repo": "317492541707.dkr.ecr.us-east-1.amazonaws.com/meridian-enterprise-backend",
+            "target": "AWS EC2 Instance ('Meridian-CICD-EC2' / Port 8001)",
+            "runner": "Self-Hosted EC2 Runner (i-0b571cd62cd238378)",
             "dispatch_response": res
         }
 
@@ -93,6 +94,6 @@ class GitHubActionsAdapter(ICICDDeploymentPort):
         return {
             "status": "in_progress",
             "conclusion": "running",
-            "message": "CI/CD Pipeline rolling deployment executing on AWS ECS Fargate."
+            "message": "CI/CD Pipeline rolling deployment executing on AWS EC2 Instance."
         }
 
