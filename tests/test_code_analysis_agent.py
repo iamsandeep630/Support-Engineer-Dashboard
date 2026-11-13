@@ -268,6 +268,78 @@ class TestCodeAnalysisAgent(unittest.TestCase):
             self.assertIn("broadcast_dashboard", res)
             self.assertIsNone(agent.get_pending_action())
 
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_generalized_navigation_arbitrary_files(self, mock_secret, mock_agent):
+        """Verify agent can navigate and inspect ANY arbitrary repository file, route, and model."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+        agent = CodeAnalysisAgent()
+
+        # 1. Inspect enterprise.py router
+        res_router = asyncio.run(agent.query_async("show me all endpoints in backend/routers/enterprise.py"))
+        self.assertIn("backend/routers/enterprise.py", res_router)
+        self.assertIn("/invoices", res_router)
+        self.assertIn("/products", res_router)
+        self.assertIn("/api/reports/quarterly-tax-reconciliation", res_router)
+        self.assertIn("Registered FastAPI Endpoints", res_router)
+
+        # 2. Inspect models.py database schemas
+        res_models = asyncio.run(agent.query_async("what models are in backend/database/models.py?"))
+        self.assertIn("backend/database/models.py", res_models)
+        self.assertIn("Invoice", res_models)
+        self.assertIn("Product", res_models)
+        self.assertIn("Classes & Schemas", res_models)
+
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_generalized_investigation_and_fix_arbitrary_file(self, mock_secret, mock_agent):
+        """Verify agent can investigate ANY bug in ANY file, stage unified diff, and deploy upon approval."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+
+        mock_repo = MagicMock(spec=ICodeRepositoryPort)
+        mock_repo.get_file_contents.return_value = (
+            "def calculate_tax(amount: float, rate: float = -0.05) -> float:\n"
+            "    return amount * rate\n"
+        )
+        mock_repo.commit_file_change.return_value = {"success": True, "commit_sha": "tax-fix-789"}
+
+        mock_cicd = MagicMock(spec=ICICDDeploymentPort)
+        mock_cicd.trigger_workflow.return_value = {"success": True, "run_id": "run-arbitrary-456"}
+
+        mock_sync = MagicMock(spec=IEnterpriseAppSyncPort)
+
+        agent = CodeAnalysisAgent(
+            repo_port=mock_repo,
+            cicd_port=mock_cicd,
+            sync_port=mock_sync
+        )
+
+        # Stage 1: Investigation of arbitrary file
+        stage1_res = asyncio.run(agent.query_async(
+            "investigate bug in backend/routers/enterprise.py: replace 'rate: float = -0.05' with 'rate: float = 0.05'"
+        ))
+
+        self.assertIn("STAGE 1: INVESTIGATION", stage1_res)
+        self.assertIn("backend/routers/enterprise.py", stage1_res)
+        self.assertIn("diff", stage1_res.lower())
+        self.assertIn("HUMAN-IN-THE-LOOP", stage1_res)
+
+        action = agent.get_pending_action()
+        self.assertIsNotNone(action)
+        self.assertEqual(action["target_file"], "backend/routers/enterprise.py")
+        self.assertIn("rate: float = 0.05", action["proposed_content"])
+
+        # Stage 2: Approval & Fix Execution
+        stage2_res = asyncio.run(agent.query_async("Approve and deploy fix to EC2"))
+
+        self.assertIn("STAGE 2: EXECUTION COMPLETE", stage2_res)
+        self.assertIn("backend/routers/enterprise.py", stage2_res)
+        self.assertIn("deploy-ec2.yml", stage2_res)
+        mock_repo.commit_file_change.assert_called_once()
+        self.assertEqual(mock_repo.commit_file_change.call_args[0][0], "backend/routers/enterprise.py")
+        mock_cicd.trigger_workflow.assert_called_once()
+        self.assertIsNone(agent.get_pending_action())
+
 
 if __name__ == "__main__":
     unittest.main()
