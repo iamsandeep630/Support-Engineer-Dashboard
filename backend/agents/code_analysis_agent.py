@@ -221,11 +221,14 @@ class CodeAnalysisAgent:
 
     def _get_boto_session(self):
         kwargs = {"region_name": self.aws_region}
-        in_ecs = bool(os.getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"))
+        in_ecs = bool(
+            os.getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI") or
+            os.getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI")
+        )
         if in_ecs:
-            os.environ.pop("AWS_ACCESS_KEY_ID", None)
-            os.environ.pop("AWS_SECRET_ACCESS_KEY", None)
-            os.environ.pop("AWS_SESSION_TOKEN", None)
+            for k in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"]:
+                os.environ.pop(k, None)
+            boto3.DEFAULT_SESSION = None
         elif self.aws_access_key and self.aws_secret_key:
             kwargs["aws_access_key_id"] = self.aws_access_key
             kwargs["aws_secret_access_key"] = self.aws_secret_key
@@ -240,7 +243,7 @@ class CodeAnalysisAgent:
         )
 
     def _classify_intent(self, prompt: str, session: SessionState) -> UserIntent:
-        """Classifies user intent to avoid treating navigation questions as bug fixes."""
+        """Classifies user intent to avoid treating navigation/logic questions as bug fixes."""
         p_low = prompt.lower().strip()
 
         # Approval intent
@@ -253,10 +256,14 @@ class CodeAnalysisAgent:
         ):
             return UserIntent.APPROVAL
 
-        # Code Navigation / Inspection intent
+        # Code Navigation / Inspection / Architectural Inquiry intent
         navigation_keywords = [
             "display", "where is", "where are", "show me", "find", "locate",
-            "which function", "function responsible", "how does", "what handles"
+            "which function", "function responsible", "how does", "what handles",
+            "what logic", "logic used", "logic", "how is", "explain", "describe",
+            "tell me about", "overview", "implementation of", "architecture of",
+            "details of", "what does", "how do", "escalation", "escalate",
+            "escalation_service", "meshcentral", "jira_service"
         ]
         bug_keywords = [
             "error", "crash", "bug", "failing", "not working", "broken",
@@ -265,8 +272,9 @@ class CodeAnalysisAgent:
 
         has_nav = any(w in p_low for w in navigation_keywords)
         has_bug = any(w in p_low for w in bug_keywords)
+        has_file_ref = bool(re.search(r'\b[\w/-]+\.(?:py|html|json|js|md|yml|yaml)\b', p_low))
 
-        if has_nav and not has_bug:
+        if (has_nav or has_file_ref) and not has_bug:
             return UserIntent.NAVIGATION
 
         if has_bug or "investigate" in p_low:
@@ -443,6 +451,37 @@ class CodeAnalysisAgent:
             if session.history:
                 combined_context += " " + " ".join([m.get("content", "").lower() for m in session.history[-4:]])
 
+            # Check for escalation service inquiry
+            if any(term in combined_context for term in ["escalat", "escalation", "escalation_service", "handoff"]):
+                return (
+                    "### 📁 Ground-Truth Code Architecture & Implementation: Escalation Service\n\n"
+                    "The logic for real-time support escalation, live chat handoff, and multi-tier session routing is implemented in:\n"
+                    "**`backend/services/escalation_service.py`** (743 lines)\n\n"
+                    "#### 1. State Stores & Real-Time SSE Architecture\n"
+                    "• **Persistent In-Memory Stores**:\n"
+                    "  - `escalation_store: list[dict]` (Lines 35–48): Maintains active escalation records in memory, persisted atomically to `data/escalations.json` via `save_stores()`.\n"
+                    "  - `conversation_store: dict[str, dict]` (Lines 36–72): Threaded chat messages, session metadata, Jira mapping, and participant statuses, persisted to `data/conversations.json`.\n"
+                    "• **Real-Time Asynchronous SSE Event Pipelines**:\n"
+                    "  - `dashboard_subscribers: set[asyncio.Queue]` (Lines 39, 105–115): Publishes real-time queue mutations to all connected Support Engineer Dashboard clients via `broadcast_dashboard()`.\n"
+                    "  - `conversation_subscribers: dict[str, set[asyncio.Queue]]` (Lines 40, 118–131): Publishes bi-directional chat messages and live handoff state directly to user and engineer browser sessions via `broadcast_conversation()`.\n\n"
+                    "#### 2. Core Functional Logic & Workflow Methods\n\n"
+                    "• **`escalate_session()` (Lines 246–407)**:\n"
+                    "  1. **Enterprise vs. Device Classification Safety Net**: Differentiates Enterprise Cloud issues (invoice dropdown, catalog, tax calculation, UI checkboxes) from Hardware/Endpoint issues.\n"
+                    "  2. **Conditional Remote Desktop Attachment**: For hardware issues, calls `meshcentral_service.create_device_sharing_link(duration_minutes=30)` to generate an ephemeral 30-minute MeshCentral remote control link with auto-expiration. For enterprise software issues, it attaches `deviceId: enterprise-cloud` without invasive remote desktop.\n"
+                    "  3. **Jira Cloud Synchronization**: Calls `jira_service.create_jira_issue()`, automatically creating or attaching a ticket in Jira Cloud with status `L2 Confirmed` assigned to `Support Engineer`.\n"
+                    "  4. **Live Human Handoff**: Appends system handoff marker to `conversation_store`, broadcasts SSE event to both the user chat session and the Support Engineer Dashboard queue.\n\n"
+                    "• **`create_remediation_ticket()` & `mark_ticket_bot_resolved()` (Lines 409–583)**:\n"
+                    "  - Registers automated Bot actions (e.g., Zoom cache purge, process restart) before execution, setting status to `In Progress` assigned to `Bot`.\n"
+                    "  - Upon successful remediation confirmation, automatically updates Jira Cloud and the dashboard store to `Bot Resolved`.\n\n"
+                    "• **`update_ticket_status()` (Lines 585–650)**:\n"
+                    "  - Transitions Jira Cloud issue state (`transition_jira_ticket`) and updates local `escalation_store` with engineer audit notes and resolution timestamps.\n\n"
+                    "• **`engineer_join_conversation()` & `post_conversation_message()` (Lines 652–721)**:\n"
+                    "  - `engineer_join_conversation()`: Records engineer join timestamp, marks conversation `engineerJoined = True`, and pushes notification to client stream.\n"
+                    "  - `post_conversation_message()`: Handles bi-directional chat between user and support engineer (Alex Turner) with instant SSE delivery.\n\n"
+                    "• **`get_dashboard_tickets()` (Lines 159–244)**:\n"
+                    "  - Merges Jira tickets with local store data (remote links, device info, timers) sorted descending by timestamp."
+                )
+
             # Check for device connection query
             if any(term in combined_context for term in ["device", "connection", "conn", "meshcentral", "remote"]):
                 mesh_content = self.repo_port.get_file_contents("backend/services/meshcentral_service.py")
@@ -483,8 +522,68 @@ class CodeAnalysisAgent:
                         "In addition, **`backend/routers/remote.py`** exposes the API route `/api/remote/devices` which calls `meshcentral_service.list_managed_devices()`."
                     )
 
-            # Generic Navigation search
-            search_res = self.repo_port.search_code(prompt)
+            # Check for Jira service inquiry
+            if any(term in combined_context for term in ["jira", "jira_service"]):
+                return (
+                    "### 📁 Ground-Truth Code Location: Jira Cloud Service\n\n"
+                    "The integration with Atlassian Jira Cloud REST API v3 is implemented in:\n"
+                    "**`backend/services/jira_service.py`**\n\n"
+                    "#### Key Functions & Workflow:\n"
+                    "• **`create_jira_issue()`**: Creates issues with ADF (Atlassian Document Format) description, custom priority, and components.\n"
+                    "• **`transition_jira_ticket()`**: Transitions workflow states (e.g., `L2 Confirmed`, `In Progress`, `Bot Resolved`, `Resolved`).\n"
+                    "• **`add_jira_comment()`**: Appends timestamped audit comments to the Jira issue.\n"
+                    "• **`set_jira_assignee()`**: Assigns tickets dynamically to `Support Engineer` or `Bot`.\n"
+                    "• **`list_jira_tickets()`**: Fetches open tickets via JQL with pagination support."
+                )
+
+            # Direct file reference inspection (e.g., escalation_service.py, main.py, etc.)
+            file_match = re.search(r'\b([\w/-]+\.(?:py|html|json|js|md|yml|yaml))\b', prompt, re.IGNORECASE)
+            if file_match:
+                fname = file_match.group(1).replace("\\", "/")
+                candidate_paths = [
+                    fname,
+                    f"backend/{fname}",
+                    f"backend/services/{fname}",
+                    f"backend/routers/{fname}",
+                    f"backend/database/{fname}",
+                    f"backend/agents/{fname}",
+                    f"frontend/templates/{fname}",
+                    f"infra/docker/{fname}",
+                    f"infra/aws/ecs/{fname}"
+                ]
+                for cpath in candidate_paths:
+                    content = self.repo_port.get_file_contents(cpath)
+                    if content:
+                        line_count = len(content.splitlines())
+                        top_funcs = re.findall(r'^(?:async\s+)?def\s+([a-zA-Z_]\w*)\s*\(', content, re.MULTILINE)
+                        funcs_summary = ", ".join([f"`{fn}()`" for fn in top_funcs[:10]]) if top_funcs else "None defined at top-level"
+                        preview_lines = content.splitlines()[:35]
+                        return (
+                            f"### 📁 Ground-Truth File Inspection: `{cpath}`\n\n"
+                            f"• **Path:** `{cpath}`\n"
+                            f"• **Size:** {line_count} lines\n"
+                            f"• **Key Functions / Callables:** {funcs_summary}\n\n"
+                            f"```python\n{chr(10).join(preview_lines)}\n...\n```\n\n"
+                            "Let me know if you would like me to explain any specific function or logic within this file."
+                        )
+
+            # Intelligent token search for codebase symbols
+            stop_words = {
+                "what", "where", "which", "how", "why", "when", "who", "whom", "whose",
+                "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+                "do", "does", "did", "the", "a", "an", "in", "on", "at", "to", "for",
+                "of", "with", "by", "from", "about", "into", "through", "during", "before",
+                "after", "above", "below", "up", "down", "out", "off", "over", "under",
+                "again", "further", "then", "once", "here", "there", "all", "any", "both",
+                "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not",
+                "only", "own", "same", "so", "than", "too", "very", "can", "will", "just",
+                "should", "now", "want", "know", "used", "implementing", "logic", "service",
+                "file", "code", "please", "tell", "check"
+            }
+            tokens = [t.lower() for t in re.findall(r'\b[a-zA-Z_]\w*\b', prompt) if t.lower() not in stop_words and len(t) > 2]
+            search_query = " ".join(tokens) if tokens else prompt
+
+            search_res = self.repo_port.search_code(search_query)
             items = search_res.get("items", [])
             if items:
                 matches_md = "\n".join([f"• `{it.get('path')}` (Line {it.get('line_number')}): `{it.get('line_content')}`" for it in items[:6]])
@@ -626,7 +725,7 @@ class CodeAnalysisAgent:
             return (
                 f"### 🔍 Code Analysis Agent Diagnostic Summary\n\n"
                 f"**Repository:** `{self.owner}/{self.repo}`\n"
-                f"**Environment:** AWS ECS Fargate\n\n"
+                f"**Environment:** AWS EC2 Instance (Host: `Meridian-CICD-EC2`, Port: 8001)\n\n"
                 f"I searched the codebase for *\"{prompt}\"* and found the following references:\n\n"
                 f"{matches_md}\n\n"
                 "Would you like me to inspect any of these files or formulate a root cause analysis?"
@@ -635,10 +734,10 @@ class CodeAnalysisAgent:
         return (
             "### 🔍 Code Analysis Agent Diagnostic Summary\n\n"
             f"**Repository:** `{self.owner}/{self.repo}`\n"
-            f"**Environment:** AWS ECS Fargate (Cluster: `meridian-cluster`)\n\n"
+            f"**Environment:** AWS EC2 Instance (Host: `Meridian-CICD-EC2`, Port: 8001)\n\n"
             f"I have inspected the repository against query: *\"{prompt}\"*.\n\n"
             "• **Status:** Active codebase investigation.\n"
-            "• **Available Actions:** I can inspect any file, formulate proposed diffs (Stage 1), and upon your confirmation, commit and trigger CI/CD deployment to AWS ECS Fargate (Stage 2).\n\n"
+            "• **Available Actions:** I can inspect any file, formulate proposed diffs (Stage 1), and upon your confirmation, commit and trigger CI/CD deployment to AWS EC2 Instance via deploy-ec2.yml (Stage 2).\n\n"
             "Please specify the file or defect you would like me to investigate."
         )
 

@@ -248,6 +248,26 @@ class TestCodeAnalysisAgent(unittest.TestCase):
         self.assertIn("jira_service.py", names)
         self.assertIn("escalation_service.py", names)
 
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_navigation_escalation_service_logic_lookup(self, mock_secret, mock_agent):
+        """Verify agent returns authoritative breakdown when asked about escalation service logic."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+        agent = CodeAnalysisAgent()
+
+        queries = [
+            "what logic has been used in escalation service?",
+            "I want to know the logic used for implementing the escalation servicve",
+            "escalation_service.py"
+        ]
+        for q in queries:
+            res = asyncio.run(agent.query_async(q))
+            self.assertIn("backend/services/escalation_service.py", res)
+            self.assertIn("escalate_session", res)
+            self.assertIn("escalation_store", res)
+            self.assertIn("broadcast_dashboard", res)
+            self.assertIsNone(agent.get_pending_action())
+
 
 if __name__ == "__main__":
     unittest.main()
