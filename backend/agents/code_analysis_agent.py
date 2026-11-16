@@ -42,6 +42,8 @@ from ports.repository_port import ICodeRepositoryPort
 from ports.cicd_port import ICICDDeploymentPort
 from ports.catalog_sync_port import IEnterpriseAppSyncPort
 from agents.tools import create_code_analysis_tools
+from resilience.circuit_breaker import CircuitBreaker, CircuitBreakerOpenException
+from resilience.session_store import ISessionStore, get_session_store
 
 logger = logging.getLogger("code_analysis_agent")
 
@@ -258,12 +260,22 @@ class CodeAnalysisAgent:
         self.cicd_port: ICICDDeploymentPort = cicd_port or Container.get_cicd_port()
         self.sync_port: IEnterpriseAppSyncPort = sync_port or Container.get_catalog_sync_port()
 
-        # Session Storage for Multi-Turn Conversations & Safe Concurrency
+        # Resilient Session Storage & Circuit Breakers (Redis with In-Memory fallback)
         self._sessions: Dict[str, SessionState] = {}
+        self._session_store: ISessionStore = get_session_store()
+        self._bedrock_breaker = CircuitBreaker(name="aws_bedrock_claude", failure_threshold=2, recovery_timeout=45.0)
 
     def _get_session(self, session_id: str = "default") -> SessionState:
         if session_id not in self._sessions:
             self._sessions[session_id] = SessionState(session_id)
+            # Rehydrate from distributed session store if available
+            stored_action = self._session_store.get_pending_action(session_id)
+            if stored_action:
+                self._sessions[session_id].pending_action = stored_action
+                self._sessions[session_id].current_stage = HITLStage.STAGE_1_INVESTIGATION
+            stored_history = self._session_store.get_history(session_id)
+            if stored_history:
+                self._sessions[session_id].history = stored_history
         return self._sessions[session_id]
 
     @property
@@ -278,6 +290,7 @@ class CodeAnalysisAgent:
     @current_stage.setter
     def current_stage(self, stage: HITLStage):
         self._get_session("default").current_stage = stage
+        self._session_store.set_stage("default", stage.value if hasattr(stage, "value") else str(stage))
 
     @property
     def _pending_action(self) -> Optional[Dict[str, Any]]:
@@ -286,16 +299,22 @@ class CodeAnalysisAgent:
     @_pending_action.setter
     def _pending_action(self, action: Optional[Dict[str, Any]]):
         self._get_session("default").pending_action = action
+        if action:
+            self._session_store.save_pending_action("default", action)
+        else:
+            self._session_store.clear_pending_action("default")
 
     def get_pending_action(self, session_id: str = "default") -> Optional[Dict[str, Any]]:
         """Returns active staged action awaiting human approval."""
-        return self._get_session(session_id).pending_action
+        session = self._get_session(session_id)
+        return session.pending_action or self._session_store.get_pending_action(session_id)
 
     def clear_pending_action(self, session_id: str = "default") -> None:
         """Clears pending staged action."""
         session = self._get_session(session_id)
         session.pending_action = None
         session.current_stage = HITLStage.STAGE_1_INVESTIGATION
+        self._session_store.clear_pending_action(session_id)
 
     def _get_boto_session(self):
         kwargs = {"region_name": self.aws_region}
@@ -408,23 +427,31 @@ class CodeAnalysisAgent:
             enriched_prompt = f"Context from recent conversation:\n{recent_context}\n\nCurrent user message:\n{prompt}"
 
         # ----------------------------------------------------------------------
-        # Strands Bedrock Reasoning Loop
+        # Strands Bedrock Reasoning Loop (Protected by Circuit Breaker)
         # ----------------------------------------------------------------------
         try:
-            bedrock_model = self._get_bedrock_model()
-            strands_agent = Agent(
-                model=bedrock_model,
-                system_prompt=self.system_prompt,
-                tools=tools_list,
-                callback_handler=None,
-            )
+            if not self._bedrock_breaker.is_open:
+                bedrock_model = self._get_bedrock_model()
+                strands_agent = Agent(
+                    model=bedrock_model,
+                    system_prompt=self.system_prompt,
+                    tools=tools_list,
+                    callback_handler=None,
+                )
 
-            result = await strands_agent.invoke_async(enriched_prompt, limits=Limits(turns=8))
-            final_response = str(result).strip()
-            if final_response:
-                session.history.append({"role": "user", "content": prompt})
-                session.history.append({"role": "assistant", "content": final_response})
-                return final_response
+                async def _invoke():
+                    return await strands_agent.invoke_async(enriched_prompt, limits=Limits(turns=8))
+
+                result = await self._bedrock_breaker.call_async(_invoke)
+                final_response = str(result).strip()
+                if final_response:
+                    session.history.append({"role": "user", "content": prompt})
+                    session.history.append({"role": "assistant", "content": final_response})
+                    self._session_store.append_history(session.session_id, "user", prompt)
+                    self._session_store.append_history(session.session_id, "assistant", final_response)
+                    return final_response
+            else:
+                logger.info("[CodeAnalysisAgent] Bedrock Circuit Breaker is OPEN. Fast-failing to deterministic engine.")
         except Exception as e:
             logger.warning(f"Strands Bedrock agent execution fell back: {e}")
 
@@ -434,6 +461,8 @@ class CodeAnalysisAgent:
         resp = await self._hitl_domain_execution(prompt, session, apply_code_fix, trigger_cicd_pipeline)
         session.history.append({"role": "user", "content": prompt})
         session.history.append({"role": "assistant", "content": resp})
+        self._session_store.append_history(session.session_id, "user", prompt)
+        self._session_store.append_history(session.session_id, "assistant", resp)
         return resp
 
     def _resolve_file(self, filename_or_path: str) -> Optional[Tuple[str, str]]:
@@ -492,6 +521,25 @@ class CodeAnalysisAgent:
         if any(term in combined_context for term in ["escalat", "escalation", "escalation_service", "handoff"]):
             content = self.repo_port.get_file_contents("backend/services/escalation_service.py")
             line_count = len(content.splitlines()) if content else 743
+            esc_meta = _extract_python_file_meta(content) if content else {}
+            fn_map = {f["name"]: f for f in esc_meta.get("functions", [])}
+
+            def _fn_rng(name: str, fallback: str) -> str:
+                if name in fn_map:
+                    f = fn_map[name]
+                    return f"Lines {f['lineno']}–{f.get('end_lineno', f['lineno'])}"
+                return fallback
+
+            rng_esc = _fn_rng("escalate_session", "Lines 246–407")
+            rng_remed = _fn_rng("create_remediation_ticket", "Lines 409–583")
+            rng_bot_res = _fn_rng("mark_ticket_bot_resolved", "Lines 508–583")
+            rng_status = _fn_rng("update_ticket_status", "Lines 585–650")
+            rng_join = _fn_rng("engineer_join_conversation", "Lines 652–721")
+            rng_post = _fn_rng("post_conversation_message", "Lines 698–721")
+            rng_dash = _fn_rng("get_dashboard_tickets", "Lines 159–244")
+            rng_bcast = _fn_rng("broadcast_dashboard", "Lines 105–115")
+            rng_bcast_conv = _fn_rng("broadcast_conversation", "Lines 118–131")
+
             return (
                 f"### 📁 Ground-Truth Code Architecture & Implementation: Escalation Service\n\n"
                 f"The logic for real-time support escalation, live chat handoff, and multi-tier session routing is implemented in:\n"
@@ -501,23 +549,23 @@ class CodeAnalysisAgent:
                 "  - `escalation_store: list[dict]` (Lines 35–48): Maintains active escalation records in memory, persisted atomically to `data/escalations.json` via `save_stores()`.\n"
                 "  - `conversation_store: dict[str, dict]` (Lines 36–72): Threaded chat messages, session metadata, Jira mapping, and participant statuses, persisted to `data/conversations.json`.\n"
                 "• **Real-Time Asynchronous SSE Event Pipelines**:\n"
-                "  - `dashboard_subscribers: set[asyncio.Queue]` (Lines 39, 105–115): Publishes real-time queue mutations to all connected Support Engineer Dashboard clients via `broadcast_dashboard()`.\n"
-                "  - `conversation_subscribers: dict[str, set[asyncio.Queue]]` (Lines 40, 118–131): Publishes bi-directional chat messages and live handoff state directly to user and engineer browser sessions via `broadcast_conversation()`.\n\n"
+                f"  - `dashboard_subscribers: set[asyncio.Queue]` (Lines 39, {rng_bcast}): Publishes real-time queue mutations to all connected Support Engineer Dashboard clients via `broadcast_dashboard()`.\n"
+                f"  - `conversation_subscribers: dict[str, set[asyncio.Queue]]` (Lines 40, {rng_bcast_conv}): Publishes bi-directional chat messages and live handoff state directly to user and engineer browser sessions via `broadcast_conversation()`.\n\n"
                 "#### 2. Core Functional Logic & Workflow Methods\n\n"
-                "• **`escalate_session()` (Lines 246–407)**:\n"
+                f"• **`escalate_session()` ({rng_esc})**:\n"
                 "  1. **Enterprise vs. Device Classification Safety Net**: Differentiates Enterprise Cloud issues (invoice dropdown, catalog, tax calculation, UI checkboxes) from Hardware/Endpoint issues.\n"
                 "  2. **Conditional Remote Desktop Attachment**: For hardware issues, calls `meshcentral_service.create_device_sharing_link(duration_minutes=30)` to generate an ephemeral 30-minute MeshCentral remote control link with auto-expiration. For enterprise software issues, it attaches `deviceId: enterprise-cloud` without invasive remote desktop.\n"
                 "  3. **Jira Cloud Synchronization**: Calls `jira_service.create_jira_issue()`, automatically creating or attaching a ticket in Jira Cloud with status `L2 Confirmed` assigned to `Support Engineer`.\n"
                 "  4. **Live Human Handoff**: Appends system handoff marker to `conversation_store`, broadcasts SSE event to both the user chat session and the Support Engineer Dashboard queue.\n\n"
-                "• **`create_remediation_ticket()` & `mark_ticket_bot_resolved()` (Lines 409–583)**:\n"
+                f"• **`create_remediation_ticket()` & `mark_ticket_bot_resolved()` ({rng_remed})**:\n"
                 "  - Registers automated Bot actions (e.g., Zoom cache purge, process restart) before execution, setting status to `In Progress` assigned to `Bot`.\n"
                 "  - Upon successful remediation confirmation, automatically updates Jira Cloud and the dashboard store to `Bot Resolved`.\n\n"
-                "• **`update_ticket_status()` (Lines 585–650)**:\n"
+                f"• **`update_ticket_status()` ({rng_status})**:\n"
                 "  - Transitions Jira Cloud issue state (`transition_jira_ticket`) and updates local `escalation_store` with engineer audit notes and resolution timestamps.\n\n"
-                "• **`engineer_join_conversation()` & `post_conversation_message()` (Lines 652–721)**:\n"
+                f"• **`engineer_join_conversation()` & `post_conversation_message()` ({rng_join})**:\n"
                 "  - `engineer_join_conversation()`: Records engineer join timestamp, marks conversation `engineerJoined = True`, and pushes notification to client stream.\n"
                 "  - `post_conversation_message()`: Handles bi-directional chat between user and support engineer (Alex Turner) with instant SSE delivery.\n\n"
-                "• **`get_dashboard_tickets()` (Lines 159–244)**:\n"
+                f"• **`get_dashboard_tickets()` ({rng_dash})**:\n"
                 "  - Merges Jira tickets with local store data (remote links, device info, timers) sorted descending by timestamp."
             )
 
@@ -525,11 +573,25 @@ class CodeAnalysisAgent:
         if any(term in combined_context for term in ["device", "connection", "conn", "meshcentral", "remote"]):
             mesh_content = self.repo_port.get_file_contents("backend/services/meshcentral_service.py")
             if mesh_content:
+                mesh_meta = _extract_python_file_meta(mesh_content)
+                m_fn_map = {f["name"]: f for f in mesh_meta.get("functions", [])}
+
+                def _m_fn_rng(name: str, fallback: str) -> str:
+                    if name in m_fn_map:
+                        f = m_fn_map[name]
+                        return f"Lines {f['lineno']}–{f.get('end_lineno', f['lineno'])}"
+                    return fallback
+
+                rng_list = _m_fn_rng("list_managed_devices", "Lines 129–150")
+                line_find = f"Line {m_fn_map['find_device']['lineno']}" if "find_device" in m_fn_map else "Line 152"
+                line_info = f"Line {m_fn_map['get_device_info']['lineno']}" if "get_device_info" in m_fn_map else "Line 190"
+                line_cfg = f"Line {m_fn_map['is_meshcentral_configured']['lineno']}" if "is_meshcentral_configured" in m_fn_map else "Line 85"
+
                 return (
                     "### 📁 Ground-Truth Code Location: Device Connection Status\n\n"
                     "The functions responsible for checking device connectivity are located in:\n"
                     "**`backend/services/meshcentral_service.py`**\n\n"
-                    "#### Primary Function: `list_managed_devices()` (Lines 129–150)\n"
+                    f"#### Primary Function: `list_managed_devices()` ({rng_list})\n"
                     "Queries MeshCentral via `meshctrl.js` and evaluates the `conn` flag (`conn == 1` indicates an active online device connection):\n"
                     "```python\n"
                     "def list_managed_devices() -> dict:\n"
@@ -555,9 +617,9 @@ class CodeAnalysisAgent:
                     "        return {\"success\": False, \"devices\": [], \"error\": str(e)}\n"
                     "```\n\n"
                     "#### Auxiliary Connection Functions in `backend/services/meshcentral_service.py`:\n"
-                    "• **`find_device(devices, identifier)`** (Line 152): Filters endpoints and defaults to online connected devices (`conn == 1`).\n"
-                    "• **`get_device_info(device_id)`** (Line 190): Retrieves connection details for a specific node.\n"
-                    "• **`is_meshcentral_configured()`** (Line 85): Verifies credentials and reachability of the MeshCentral daemon.\n\n"
+                    f"• **`find_device(devices, identifier)`** ({line_find}): Filters endpoints and defaults to online connected devices (`conn == 1`).\n"
+                    f"• **`get_device_info(device_id)`** ({line_info}): Retrieves connection details for a specific node.\n"
+                    f"• **`is_meshcentral_configured()`** ({line_cfg}): Verifies credentials and reachability of the MeshCentral daemon.\n\n"
                     "In addition, **`backend/routers/remote.py`** exposes the API route `/api/remote/devices` which calls `meshcentral_service.list_managed_devices()`."
                 )
 
@@ -763,10 +825,11 @@ class CodeAnalysisAgent:
                 "original_content": orig_content,
                 "proposed_content": patched_content,
                 "proposed_diff": diff_str,
-                "workflow": "deploy-ec2.yml",
+                "workflow": "deploy-ecs.yml" if "ecs" in p_low else "deploy-ec2.yml",
                 "commit_message": "Fix: enable product visibility in invoice dropdown",
                 "status": "PENDING_APPROVAL"
             }
+            self._session_store.save_pending_action(session.session_id, session.pending_action)
 
             return (
                 "### 🔍 [STAGE 1: INVESTIGATION & PROPOSED DIFF] Invoice Dropdown Missing Products\n\n"
@@ -833,10 +896,11 @@ class CodeAnalysisAgent:
                 "original_content": orig_content,
                 "proposed_content": patched_content,
                 "proposed_diff": diff_str,
-                "workflow": "deploy-ec2.yml",
+                "workflow": "deploy-ecs.yml" if "ecs" in p_low else "deploy-ec2.yml",
                 "commit_message": "Fix: resolve invoice compliance checkbox state binding",
                 "status": "PENDING_APPROVAL"
             }
+            self._session_store.save_pending_action(session.session_id, session.pending_action)
 
             return (
                 "### 🔍 [STAGE 1: INVESTIGATION & PROPOSED DIFF] Invoice Checkbox Not Getting Ticked\n\n"
@@ -942,10 +1006,11 @@ class CodeAnalysisAgent:
                 "original_content": orig_content,
                 "proposed_content": patched_content,
                 "proposed_diff": diff_str,
-                "workflow": "deploy-ec2.yml",
+                "workflow": "deploy-ecs.yml" if "ecs" in p_low else "deploy-ec2.yml",
                 "commit_message": f"Fix: resolve {prompt[:60]} in {target_path}",
                 "status": "PENDING_APPROVAL"
             }
+            self._session_store.save_pending_action(session.session_id, session.pending_action)
 
             return (
                 f"### 🔍 [STAGE 1: INVESTIGATION & PROPOSED DIFF] Code Defect in `{target_path}`\n\n"
@@ -989,33 +1054,28 @@ class CodeAnalysisAgent:
         """
         Generalized Autonomous Fix Execution & CI/CD Deployment Engine (Stage 2):
         Applies staged patches to ANY file in the repository, syncs runtime if needed,
-        and triggers the GitHub Actions CI/CD deployment pipeline to AWS EC2.
+        and triggers the GitHub Actions CI/CD deployment pipeline to AWS ECS Fargate or EC2.
         """
-        target_action = session.pending_action
+        target_action = session.pending_action or self._session_store.get_pending_action(session.session_id)
         p_low = prompt.lower().strip()
 
         if not target_action:
-            if "checkbox" in p_low:
-                target_action = {
-                    "defect_type": "CHECKBOX",
-                    "target_file": "frontend/templates/employee_portal.html",
-                    "proposed_content": "<!-- Patched checkbox event handler in employee_portal.html -->",
-                    "commit_message": "Fix: resolve invoice compliance checkbox event handling and toggle state",
-                    "workflow": "deploy-ec2.yml"
-                }
-            else:
-                target_action = {
-                    "defect_type": "CATALOG_DROPDOWN",
-                    "target_file": "backend/catalog_config.json",
-                    "proposed_content": json.dumps({"products": {"4K Webcam Pro": {"show_in_invoice_dropdown": True}}}, indent=2),
-                    "commit_message": "Fix: enable 4K Webcam Pro in invoice dropdown",
-                    "workflow": "deploy-ec2.yml"
-                }
+            return (
+                "### ⚠️ [STAGE 2: ACTION REJECTED] No Pending Action Staged\n\n"
+                f"There is currently no verified code diff staged for approval in session `{session.session_id}`.\n\n"
+                "**Safety Protocol:**\n"
+                "The Code Analysis Agent requires an explicit Stage 1 investigation before any production mutation or deployment can proceed. "
+                "Please describe the issue or specify the target file you would like investigated so that a verified diff can be staged."
+            )
 
         target_file = target_action.get("target_file", "backend/catalog_config.json")
         proposed_content = target_action.get("proposed_content", "")
         commit_msg = target_action.get("commit_message", f"Fix: apply verified code changes to {target_file}")
         workflow = target_action.get("workflow", "deploy-ec2.yml")
+        if "ecs" in p_low:
+            workflow = "deploy-ecs.yml"
+        elif "ec2" in p_low:
+            workflow = "deploy-ec2.yml"
 
         fix_res = await apply_code_fix_tool(target_file, proposed_content, commit_msg)
         cicd_res = await trigger_cicd_tool(workflow, "main", "production")
@@ -1030,6 +1090,19 @@ class CodeAnalysisAgent:
                 "• In-memory catalog is now synchronized, making the product immediately selectable in production.\n\n"
             )
 
+        is_ecs = "ecs" in workflow.lower()
+        infra_target = (
+            "AWS ECS Fargate Cluster ('meridian-cluster' / Service: 'meridian-enterprise-service')"
+            if is_ecs
+            else "AWS EC2 Instance (Host: `Meridian-CICD-EC2`, Port: 8001)"
+        )
+        workflow_title = (
+            "Meridian Enterprise App - ECS Fargate CI/CD"
+            if is_ecs
+            else "Meridian Enterprise App - Production DevSecOps & EC2 CI/CD"
+        )
+        deployment_label = "ECS Fargate Rolling Update" if is_ecs else "EC2 Deployment & Verification"
+
         return (
             "### ✅ [STAGE 2: EXECUTION COMPLETE] Code Fix Applied & Production CI/CD Triggered\n\n"
             "**1. Repository Code Changes Applied:**\n"
@@ -1037,13 +1110,13 @@ class CodeAnalysisAgent:
             f"• **Commit Status:** {fix_res}\n\n"
             f"{sync_note}"
             "**3. GitHub Actions CI/CD Pipeline Execution:**\n"
-            f"• **Workflow:** `Meridian Enterprise App - Production DevSecOps & EC2 CI/CD` (`.github/workflows/{workflow}`)\n"
-            "• **Target Infrastructure:** AWS EC2 Instance (Host: `Meridian-CICD-EC2`, Port: 8001)\n"
+            f"• **Workflow:** `{workflow_title}` (`.github/workflows/{workflow}`)\n"
+            f"• **Target Infrastructure:** {infra_target}\n"
             "• **Pipeline Stages:**\n"
             "  1. 🛡️ **DevSecOps Quality Gate**: Syntax check, Ruff linter, dead code scan, MyPy, Pytest, Bandit, Trufflehog secret detection, safety dependency scan.\n"
             "  2. 🐳 **Supply Chain Security**: Docker image build, Trivy vulnerability scan, SBOM generation.\n"
-            "  3. 🚀 **EC2 Deployment & Verification**: Rolling update on EC2 via self-hosted runner, automated health check, auto-rollback on failure.\n\n"
-            f"> 💡 *The code fix for `{target_file}` has been committed and the CI/CD pipeline is deploying to the AWS EC2 instance. The updates will be fully operational in production within minutes.*"
+            f"  3. 🚀 **{deployment_label}**: Rolling update on {infra_target}, automated health check, auto-rollback on failure.\n\n"
+            f"> 💡 *The code fix for `{target_file}` has been committed and the CI/CD pipeline is deploying to {infra_target}. The updates will be fully operational in production within minutes.*"
         )
 
     async def _hitl_domain_execution(

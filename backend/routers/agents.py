@@ -51,10 +51,11 @@ async def approve_deployment(req: dict = None):
     req = req or {}
     session_id = req.get("session_id", "default").strip() or "default"
     result = await code_agent.query_async("approve and proceed with deployment to AWS ECS Fargate", session_id=session_id)
+    is_rejected = "ACTION REJECTED" in result or "No Pending Action Staged" in result
     return {
-        "success": True,
-        "stage": "STAGE_2_EXECUTION",
-        "requires_approval": False,
+        "success": not is_rejected,
+        "stage": "STAGE_1_INVESTIGATION" if is_rejected else "STAGE_2_EXECUTION",
+        "requires_approval": is_rejected,
         "response": result,
         "session_id": session_id
     }

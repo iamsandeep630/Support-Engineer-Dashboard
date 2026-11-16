@@ -340,6 +340,67 @@ class TestCodeAnalysisAgent(unittest.TestCase):
         mock_cicd.trigger_workflow.assert_called_once()
         self.assertIsNone(agent.get_pending_action())
 
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_approval_without_pending_action_rejected(self, mock_secret, mock_agent):
+        """Verify safety guard: attempting approval without a staged diff is strictly rejected with no mutation."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+
+        mock_repo = MagicMock(spec=ICodeRepositoryPort)
+        mock_cicd = MagicMock(spec=ICICDDeploymentPort)
+        mock_sync = MagicMock(spec=IEnterpriseAppSyncPort)
+
+        agent = CodeAnalysisAgent(
+            repo_port=mock_repo,
+            cicd_port=mock_cicd,
+            sync_port=mock_sync
+        )
+
+        # Ensure no pending action exists
+        agent.clear_pending_action(session_id="uninitiated-session")
+        self.assertIsNone(agent.get_pending_action(session_id="uninitiated-session"))
+
+        # User attempts to approve out of nowhere
+        res = asyncio.run(agent.query_async("Approve and deploy", session_id="uninitiated-session"))
+
+        # Must reject with safety notice
+        self.assertIn("ACTION REJECTED", res)
+        self.assertIn("No Pending Action Staged", res)
+        self.assertIn("Safety Protocol", res)
+
+        # Crucially: Zero repository commits or CI/CD dispatches
+        mock_repo.commit_file_change.assert_not_called()
+        mock_cicd.trigger_workflow.assert_not_called()
+        mock_sync.reload_catalog.assert_not_called()
+
+    @patch("agents.code_analysis_agent.Agent")
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_bedrock_circuit_breaker_protection(self, mock_secret, mock_agent_cls):
+        """Verify circuit breaker trips on repeated Bedrock failures and invokes domain fallback."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+
+        mock_instance = AsyncMock()
+        mock_instance.invoke_async = AsyncMock(side_effect=TimeoutError("AWS Bedrock timeout"))
+        mock_agent_cls.return_value = mock_instance
+
+        agent = CodeAnalysisAgent()
+        agent._bedrock_breaker.failure_threshold = 2
+        agent._bedrock_breaker.recovery_timeout = 60.0
+
+        # Query 1 fails and records failure
+        res1 = asyncio.run(agent.query_async("Investigate why 4K Webcam Pro is not showing in dropdown", session_id="cb-session-1"))
+        self.assertIn("STAGE 1: INVESTIGATION", res1)
+
+        # Query 2 fails and trips breaker to OPEN
+        res2 = asyncio.run(agent.query_async("Investigate why 4K Webcam Pro is not showing in dropdown", session_id="cb-session-2"))
+        self.assertIn("STAGE 1: INVESTIGATION", res2)
+        self.assertTrue(agent._bedrock_breaker.is_open)
+
+        # Query 3 fast-fails Bedrock instantly and routes straight to fallback
+        res3 = asyncio.run(agent.query_async("Can you display me the function responsible for checking device connection?", session_id="cb-session-3"))
+        self.assertIn("list_managed_devices", res3)
+        self.assertIn("meshcentral_service.py", res3)
+
 
 if __name__ == "__main__":
     unittest.main()

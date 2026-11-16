@@ -43,3 +43,14 @@ BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-sonnet-2024
 # GitHub Integration (Code Analysis Agent)
 GITHUB_REPO = os.getenv("GITHUB_REPO", "iamsandeep630/Meridian-Enterprise-Application")
 GITHUB_PERSONAL_ACCESS_TOKEN = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN", "")
+
+# Deployment Target & Infrastructure Defaults (ECS Fargate vs EC2)
+DEPLOYMENT_TARGET = os.getenv("DEPLOYMENT_TARGET", "ecs_fargate").lower()
+DEFAULT_WORKFLOW = os.getenv("DEFAULT_WORKFLOW", "deploy-ecs.yml" if DEPLOYMENT_TARGET == "ecs_fargate" else "deploy-ec2.yml")
+ECS_CLUSTER = os.getenv("ECS_CLUSTER", "meridian-cluster")
+ECS_SERVICE = os.getenv("ECS_SERVICE", "meridian-enterprise-service")
+AWS_CODEPIPELINE_NAME = os.getenv("AWS_CODEPIPELINE_NAME", "meridian-enterprise-pipeline")
+
+# Redis Configuration (Optional / Distributed Session Store & Cache)
+REDIS_URL = os.getenv("REDIS_URL", "")
+
