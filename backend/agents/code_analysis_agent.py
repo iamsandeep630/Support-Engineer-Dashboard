@@ -24,7 +24,7 @@ import uuid
 from enum import Enum
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Callable
 import boto3
 
 from strands import Agent, tool
