@@ -17,8 +17,14 @@ load_dotenv(BASE_DIR / ".env")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("SUPPORT_PORT", "8002"))
 
-# Enterprise Application URL (Port 8001)
-ENTERPRISE_APP_URL = os.getenv("ENTERPRISE_APP_URL", "http://localhost:8001")
+DEPLOYED_ENTERPRISE_URL = "https://meridian-nlb-7ae659c9d57f1a53.elb.us-east-1.amazonaws.com"
+_raw_ent_url = os.getenv("ENTERPRISE_APP_URL") or os.getenv("PUBLIC_APP_URL")
+if _raw_ent_url and "localhost" not in _raw_ent_url and "127.0.0.1" not in _raw_ent_url:
+    ENTERPRISE_APP_URL = _raw_ent_url.strip().rstrip("/")
+elif PORT == 80 or os.getenv("AWS_EXECUTION_ENV") or os.getenv("ECS_CONTAINER_METADATA_URI"):
+    ENTERPRISE_APP_URL = DEPLOYED_ENTERPRISE_URL
+else:
+    ENTERPRISE_APP_URL = (_raw_ent_url or DEPLOYED_ENTERPRISE_URL).strip().rstrip("/")
 
 # Templates and Static Directories
 TEMPLATES_DIR = BASE_DIR / "frontend" / "templates"

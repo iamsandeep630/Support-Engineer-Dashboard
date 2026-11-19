@@ -1765,13 +1765,13 @@
       const jiraUrl = t.jiraUrl || `https://iamsandeep630.atlassian.net/browse/${t.jiraKey || t.id}`;
       let chatUrl = t.chatLink || '';
       const isRemote = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-      const enterpriseBase = window.ENTERPRISE_APP_URL || (isRemote ? 'https://meridian-nlb-7ae659c9d57f1a53.elb.us-east-1.amazonaws.com' : (window.location.port === '8002' ? window.location.origin.replace(':8002', ':8001') : 'http://localhost:8001'));
+      const enterpriseBase = window.ENTERPRISE_APP_URL || (isRemote ? 'https://meridian-nlb-7ae659c9d57f1a53.elb.us-east-1.amazonaws.com' : (window.location.port === '8002' ? window.location.origin.replace(':8002', ':8001') : 'https://meridian-nlb-7ae659c9d57f1a53.elb.us-east-1.amazonaws.com'));
 
       if (!chatUrl || chatUrl.startsWith('/')) {
         const cid = t.conversationId || t.id || '1';
         chatUrl = chatUrl ? `${enterpriseBase}${chatUrl}` : `${enterpriseBase}/support/chat/${cid}`;
-      } else if (isRemote && (chatUrl.includes('localhost:8001') || chatUrl.includes('127.0.0.1:8001'))) {
-        chatUrl = chatUrl.replace(/https?:\/\/(localhost|127\.0\.0\.1):8001/, enterpriseBase);
+      } else if (isRemote && /https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?/.test(chatUrl)) {
+        chatUrl = chatUrl.replace(/https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?/, enterpriseBase);
       }
 
       return `

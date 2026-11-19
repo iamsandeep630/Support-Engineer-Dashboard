@@ -171,10 +171,29 @@ def list_jira_tickets(limit: int = 50) -> list[dict]:
                             conv_id = sess_match.group(1)
                             chat_link = f"{ENTERPRISE_APP_URL}/support/chat/{conv_id}"
 
-                    # Normalize localhost chat_link to configured ENTERPRISE_APP_URL if remote
-                    if chat_link and ("localhost:8001" in chat_link or "127.0.0.1:8001" in chat_link):
-                        if ENTERPRISE_APP_URL and "localhost" not in ENTERPRISE_APP_URL:
-                            chat_link = re.sub(r"https?://(localhost|127\.0\.0\.1):8001", ENTERPRISE_APP_URL, chat_link)
+                    # Normalize localhost or private IP chat_link to configured ENTERPRISE_APP_URL
+                    if chat_link:
+                        target_base = ENTERPRISE_APP_URL or "https://meridian-nlb-7ae659c9d57f1a53.elb.us-east-1.amazonaws.com"
+                        chat_link = re.sub(
+                            r"https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?",
+                            target_base.rstrip("/"),
+                            chat_link
+                        )
+
+                    # Extract Self Help Agent Escalation Summary & Diagnostic Insights
+                    exec_details = ""
+                    reason_m = re.search(r"\*Escalation Reason:\*\s*([^\n]+)", all_text)
+                    steps_m = re.search(r"\*Steps Followed(?: by Self Help Agent)?:\*\s*([^\n]+)", all_text)
+                    limit_m = re.search(r"\*Resolution Limitation[^\n]*:\*\s*([^\n]+)", all_text)
+                    parts = []
+                    if reason_m:
+                        parts.append(f"• Escalation Reason: {reason_m.group(1).strip()}")
+                    if steps_m:
+                        parts.append(f"• Steps Followed: {steps_m.group(1).strip()}")
+                    if limit_m:
+                        parts.append(f"• Resolution Limitation: {limit_m.group(1).strip()}")
+                    if parts:
+                        exec_details = "\n".join(parts)
 
                     # Calculate expiry if remote_link exists
                     expires_at = None
@@ -206,7 +225,8 @@ def list_jira_tickets(limit: int = 50) -> list[dict]:
                         "chatLink": chat_link,
                         "conversationId": conv_id,
                         "linkExpiresAt": expires_at,
-                        "expiresAt": expires_at
+                        "expiresAt": expires_at,
+                        "executionDetails": exec_details
                     })
                 return issues
             else:
