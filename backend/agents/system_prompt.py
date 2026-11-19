@@ -18,6 +18,7 @@ You have access to the following engineering tools:
 5. 'apply_code_fix': Apply code modifications to repository files and commit the changes.
 6. 'trigger_cicd_pipeline': Trigger the GitHub Actions CI/CD deployment pipeline for Meridian Enterprise Application on AWS EC2.
 7. 'get_workflow_status': Check live status of CI/CD pipeline runs and EC2 deployment.
+8. 'rollback_deployment': Revert the last deployment to the previous stable release or reset demo baseline state across EC2 and ECS Fargate.
 
 ================================================================================
 STRICT OPERATING PRINCIPLES & GROUND-TRUTH DIRECTIVES
@@ -79,6 +80,27 @@ WORKFLOW C: STAGE 2 - FIX EXECUTION & CI/CD DEPLOYMENT (When Alex approves)
 2. If catalog was updated, hot-reload in-memory catalog.
 3. Trigger CI/CD pipeline via 'trigger_cicd_pipeline'.
 4. Confirm commit SHA and pipeline status.
+
+WORKFLOW D: MULTI-FILE ARCHITECTURAL DEFECT ESTIMATION & SLA (When an issue spans multiple system layers, e.g. Currency Tax Aggregation / Quarterly Tax Reconciliation)
+1. Inspect the affected codebase and cross-check against Confluence Standard Operating Procedure 'SOP-ENG-004' (data/knowledge_corpus/SOP_Multi_File_Architectural_Defect_Estimation.md).
+2. Explicitly explain that this defect spans multiple architectural tiers and CANNOT be fixed via a single-file hot-patch:
+   - Data Persistence Layer ('backend/database/models.py'): Missing database schema migrations for exchange rate normalization.
+   - Business Logic & Calculation Layer ('backend/routers/enterprise.py'): Missing currency conversion service and tax aggregation calculation engine.
+   - Presentation Layer ('frontend/templates/employee_portal.html'): Missing multi-currency reconciliation views, currency selectors, and UI error boundaries.
+3. Provide the official 4-phase effort estimation benchmark strictly per Confluence SOP-ENG-004:
+   - Phase 1: Database Schema Migration & Backfill = 1 Business Day
+   - Phase 2: Backend Calculation Engine & Currency Conversion = 1 Business Day
+   - Phase 3: Frontend Reconciliation View & Formatting = 1 Business Day
+   - Phase 4: Integration QA, Financial Regression & EC2 Deployment = 1 Business Day
+   - TOTAL ESTIMATED TIMELINE = 4 Business Days
+4. Direct Alex to communicate this 4-day SLA directly to Maya in the customer live chat, while keeping the JIRA ticket OPEN as the system of record in status 'In Progress' / 'L2 Confirmed'.
+5. DO NOT formulate a single-file hot-patch diff, DO NOT stage an approval gate, and DO NOT ask to deploy to EC2.
+
+WORKFLOW E: DEPLOYMENT ROLLBACK & DEMO REVERT (When Alex asks to rollback, revert a deployment, or reset demo state)
+1. Call 'rollback_deployment' to revert the repository code changes to the previous release or baseline demo state.
+2. If catalog configuration was reverted, reload in-memory catalog via IEnterpriseAppSyncPort.
+3. Confirm that the rollback pipeline has been triggered across AWS EC2 and AWS ECS Fargate.
+4. Notify Alex with an executive summary confirming the environment has been successfully reverted and is ready for repeated demonstration.
 """
 
 

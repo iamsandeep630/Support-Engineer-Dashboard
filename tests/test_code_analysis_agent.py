@@ -375,8 +375,8 @@ class TestCodeAnalysisAgent(unittest.TestCase):
 
     @patch("agents.code_analysis_agent.Agent")
     @patch("agents.code_analysis_agent._load_env_secret")
-    def test_bedrock_circuit_breaker_protection(self, mock_secret, mock_agent_cls):
-        """Verify circuit breaker trips on repeated Bedrock failures and invokes domain fallback."""
+    def test_bedrock_failure_falls_back_to_deterministic_engine(self, mock_secret, mock_agent_cls):
+        """Verify that when Bedrock LLM fails, agent falls back to deterministic engine gracefully."""
         mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
 
         mock_instance = AsyncMock()
@@ -384,22 +384,166 @@ class TestCodeAnalysisAgent(unittest.TestCase):
         mock_agent_cls.return_value = mock_instance
 
         agent = CodeAnalysisAgent()
-        agent._bedrock_breaker.failure_threshold = 2
-        agent._bedrock_breaker.recovery_timeout = 60.0
 
-        # Query 1 fails and records failure
-        res1 = asyncio.run(agent.query_async("Investigate why 4K Webcam Pro is not showing in dropdown", session_id="cb-session-1"))
-        self.assertIn("STAGE 1: INVESTIGATION", res1)
+        # Bedrock fails, but fallback engine still provides useful navigation response
+        res = asyncio.run(agent.query_async("Can you display me the function responsible for checking device connection?", session_id="fallback-session"))
+        self.assertIn("list_managed_devices", res)
+        self.assertIn("meshcentral_service.py", res)
 
-        # Query 2 fails and trips breaker to OPEN
-        res2 = asyncio.run(agent.query_async("Investigate why 4K Webcam Pro is not showing in dropdown", session_id="cb-session-2"))
+        # Bedrock fails, but fallback engine still provides useful investigation response
+        res2 = asyncio.run(agent.query_async("Investigate why 4K Webcam Pro is not showing in dropdown", session_id="fallback-session-2"))
         self.assertIn("STAGE 1: INVESTIGATION", res2)
-        self.assertTrue(agent._bedrock_breaker.is_open)
 
-        # Query 3 fast-fails Bedrock instantly and routes straight to fallback
-        res3 = asyncio.run(agent.query_async("Can you display me the function responsible for checking device connection?", session_id="cb-session-3"))
-        self.assertIn("list_managed_devices", res3)
-        self.assertIn("meshcentral_service.py", res3)
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_multiturn_no_history_pollution_in_fallback(self, mock_secret, mock_agent):
+        """Verify that previous conversation history does not pollute keyword matching in fallback engine."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+        agent = CodeAnalysisAgent()
+
+        # Turn 1: Ask about meshcentral — triggers device connection response
+        res1 = asyncio.run(agent.query_async(
+            "Explain me the purpose of list_managed_devices() inside meshcentral_service.py file?",
+            session_id="pollution-test"
+        ))
+        self.assertIn("meshcentral_service.py", res1)
+        self.assertIn("list_managed_devices", res1)
+
+        # Turn 2: Ask about chunker.py — must NOT return meshcentral response
+        res2 = asyncio.run(agent.query_async(
+            "which chunking strategy is used in chunker.py file?",
+            session_id="pollution-test"
+        ))
+        self.assertIn("chunker.py", res2)
+        self.assertNotIn("Device Connection Status", res2)
+
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_scenario_2_mandatory_remarks_box_investigation_and_approval(self, mock_secret, mock_agent):
+        """Scenario 2: Single-File Code Fix for mandatory remarks box (Rule INV-REM-102)."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+
+        mock_repo = MagicMock(spec=ICodeRepositoryPort)
+        mock_repo.get_file_contents.return_value = (
+            "  function handleTaxCodeChange(val) {\n"
+            "    const remarks = document.getElementById('invRemarks');\n"
+            "    if (val === 'GST 28% (New Category)') {\n"
+            "      remarks.disabled = true;\n"
+            "    }\n"
+            "  }\n"
+        )
+        mock_repo.commit_file_change.return_value = {"success": True, "commit_sha": "rem-box-fix-102"}
+
+        mock_cicd = MagicMock(spec=ICICDDeploymentPort)
+        mock_cicd.trigger_workflow.return_value = {"success": True, "run_id": "run-rem-box-202"}
+
+        mock_sync = MagicMock(spec=IEnterpriseAppSyncPort)
+
+        agent = CodeAnalysisAgent(
+            repo_port=mock_repo,
+            cicd_port=mock_cicd,
+            sync_port=mock_sync
+        )
+
+        # Stage 1: Investigation of mandatory remark box bug
+        res1 = asyncio.run(agent.query_async(
+            "Maya hits a bug where a mandatory remark box refuses to enable. Investigate the repository.",
+            session_id="scenario-2-session"
+        ))
+        self.assertIn("STAGE 1: INVESTIGATION", res1)
+        self.assertIn("Mandatory Remark Box Refuses to Enable", res1)
+        self.assertIn("frontend/templates/employee_portal.html", res1)
+        self.assertIn("INV-REM-102", res1)
+        self.assertIn("remarks.disabled = false;", res1)
+        self.assertIn("[ACTION_REQUIRED", res1)
+
+        action = agent.get_pending_action(session_id="scenario-2-session")
+        self.assertIsNotNone(action)
+        self.assertEqual(action["defect_type"], "REMARKS_BOX")
+        self.assertEqual(action["target_file"], "frontend/templates/employee_portal.html")
+        self.assertIn("remarks.disabled = false;", action["proposed_content"])
+
+        # Stage 2: Alex approves the snippet and deploys
+        res2 = asyncio.run(agent.query_async(
+            "Approve the snippet and deploy to EC2",
+            session_id="scenario-2-session"
+        ))
+        self.assertIn("STAGE 2: EXECUTION COMPLETE", res2)
+        self.assertIn("frontend/templates/employee_portal.html", res2)
+        mock_repo.commit_file_change.assert_called_once()
+        self.assertEqual(mock_repo.commit_file_change.call_args[0][0], "frontend/templates/employee_portal.html")
+        mock_cicd.trigger_workflow.assert_called_once()
+        self.assertIsNone(agent.get_pending_action(session_id="scenario-2-session"))
+
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_scenario_3_currency_tax_aggregation_multi_file_estimation(self, mock_secret, mock_agent):
+        """Scenario 3: Multi-File Architectural Defect Estimation against Confluence SOP-ENG-004."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+
+        agent = CodeAnalysisAgent()
+
+        query = (
+            "Maya attempts to generate a quarterly tax reconciliation report, but the application throws "
+            "a 'Currency Tax Aggregation' error and crashes. Investigate repository."
+        )
+        res = asyncio.run(agent.query_async(query, session_id="scenario-3-session"))
+
+        self.assertIn("Currency Tax Aggregation", res)
+        self.assertIn("SOP-ENG-004", res)
+        self.assertIn("4 Business Days", res)
+        self.assertIn("backend/database/models.py", res)
+        self.assertIn("backend/routers/enterprise.py", res)
+        self.assertIn("frontend/templates/employee_portal.html", res)
+        self.assertIn("JIRA Ticket Lifecycle", res)
+
+        # Architectural defect should NOT stage a single-file hot-patch
+        self.assertIsNone(agent.get_pending_action(session_id="scenario-3-session"))
+
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_rollback_deployment_reverts_demo_scenarios(self, mock_secret, mock_agent):
+        """Verify rollback_deployment tool and intent reverts code changes to baseline and resets demo."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+
+        mock_repo = MagicMock(spec=ICodeRepositoryPort)
+        mock_repo.get_file_contents.side_effect = lambda p: (
+            '{"products": {"4K Webcam Pro": {"show_in_invoice_dropdown": true}}}' if "catalog" in p
+            else "remarks.disabled = false;" if "employee_portal" in p
+            else None
+        )
+        mock_repo.commit_file_change.return_value = {"success": True, "commit_sha": "rollback-sha-123"}
+
+        mock_cicd = MagicMock(spec=ICICDDeploymentPort)
+        mock_cicd.rollback_deployment.return_value = {"success": True, "run_id": "run-rollback-789", "message": "Restored"}
+
+        mock_sync = MagicMock(spec=IEnterpriseAppSyncPort)
+        mock_sync.reload_catalog.return_value = {"success": True}
+
+        agent = CodeAnalysisAgent(
+            repo_port=mock_repo,
+            cicd_port=mock_cicd,
+            sync_port=mock_sync
+        )
+
+        res = asyncio.run(agent.query_async(
+            "Please revert the last deployment and reset demo scenario state.",
+            session_id="rollback-test-session"
+        ))
+
+        self.assertIn("DEPLOYMENT ROLLBACK COMPLETE", res)
+        self.assertIn("Reverted Last Deployment", res)
+        self.assertIn("catalog_config.json", res)
+        self.assertIn("employee_portal.html", res)
+
+        # Verify commits to restore baseline state
+        self.assertTrue(mock_repo.commit_file_change.called)
+        # Verify catalog reload
+        mock_sync.reload_catalog.assert_called_once()
+        # Verify rollback deployment triggered
+        mock_cicd.rollback_deployment.assert_called_once()
+        # Verify pending action is clean
+        self.assertIsNone(agent.get_pending_action(session_id="rollback-test-session"))
 
 
 if __name__ == "__main__":

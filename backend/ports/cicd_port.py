@@ -17,3 +17,7 @@ class ICICDDeploymentPort(Protocol):
         """Queries the status and health conclusion of the latest pipeline run."""
         ...
 
+    def rollback_deployment(self, workflow_file: str = "deploy-ec2.yml", target_commit: Optional[str] = None) -> Dict[str, Any]:
+        """Rolls back the deployment to the previous stable release or restores backup."""
+        ...
+

@@ -27,7 +27,7 @@ def create_code_analysis_tools(
     """
     list_dir, get_file, search, list_c = build_repository_tools(repo_port)
     (apply_fix,) = build_remediation_tools(repo_port, sync_port)
-    trig_cicd, wf_status = build_cicd_tools(cicd_port)
+    trig_cicd, wf_status, rollback_dep = build_cicd_tools(cicd_port)
 
     tools_list = [
         list_dir,
@@ -36,7 +36,8 @@ def create_code_analysis_tools(
         list_c,
         apply_fix,
         trig_cicd,
-        wf_status
+        wf_status,
+        rollback_dep
     ]
 
     tools_dict = {
@@ -47,6 +48,7 @@ def create_code_analysis_tools(
         "apply_code_fix": apply_fix,
         "trigger_cicd_pipeline": trig_cicd,
         "get_workflow_status": wf_status,
+        "rollback_deployment": rollback_dep
     }
 
     return tools_list, tools_dict

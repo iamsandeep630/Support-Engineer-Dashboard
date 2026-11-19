@@ -159,3 +159,16 @@ class AWSCodePipelineAdapter(ICICDDeploymentPort):
             "target": f"AWS ECS Fargate ('{self.cluster_name}' / '{self.service_name}')"
         }
 
+    def rollback_deployment(self, workflow_file: str = "meridian-enterprise-pipeline", target_commit: Optional[str] = None) -> Dict[str, Any]:
+        """Triggers rollback pipeline execution on AWS CodePipeline."""
+        res = self.trigger_workflow(workflow_file=workflow_file, ref=target_commit or "main", environment="production")
+        return {
+            "success": True,
+            "action": "ROLLBACK_DEPLOYMENT",
+            "provider": "AWS CodePipeline",
+            "workflow": workflow_file,
+            "run_id": res.get("run_id", "run-aws-rollback"),
+            "target": f"AWS ECS Fargate ('{self.cluster_name}' / '{self.service_name}')",
+            "message": "AWS CodePipeline rollback triggered to restore previous stable release."
+        }
+

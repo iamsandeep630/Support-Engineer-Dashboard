@@ -48,7 +48,7 @@
         },
         {
           "name": "BEDROCK_MODEL_ID",
-          "value": "anthropic.claude-3-sonnet-20240229-v1:0"
+          "value": "in.anthropic.claude-sonnet-5"
         },
         {
           "name": "ENTERPRISE_APP_URL",
