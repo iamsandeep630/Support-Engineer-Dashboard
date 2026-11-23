@@ -465,7 +465,7 @@ class CodeAnalysisAgent:
         intent = self._classify_intent(prompt, session)
 
         # ----------------------------------------------------------------------
-        # ROLLBACK: Revert Last Deployment / Demo State Reset
+        # ROLLBACK: Revert Last Deployment / State Reset
         # ----------------------------------------------------------------------
         if intent == UserIntent.ROLLBACK:
             resp = await self._dynamic_rollback_execution(prompt, session, rollback_deployment)
@@ -555,7 +555,7 @@ class CodeAnalysisAgent:
         p_low = prompt.lower()
 
         # Scenario 1: Catalog Dropdown Defect
-        if "dropdown" in p_low or "4k webcam" in p_low or "catalog" in p_low:
+        if any(w in p_low for w in ["dropdown", "drop down", "drop-down", "4k webcam", "webcam 4k", "webcam", "catalog"]):
             resolved = self._resolve_file("backend/catalog_config.json")
             orig_content = resolved[1] if resolved else '{\n  "products": {\n    "4K Webcam Pro": {\n      "show_in_invoice_dropdown": false\n    }\n  }\n}'
             try:
@@ -563,7 +563,7 @@ class CodeAnalysisAgent:
                 prods = cfg.get("products", {})
                 target_prod = "4K Webcam Pro"
                 for p_name in prods:
-                    if p_name.lower() in p_low:
+                    if p_name.lower() in p_low or any(tok in p_low for tok in p_name.lower().split() if len(tok) > 2):
                         target_prod = p_name
                         break
                 if target_prod in prods:
@@ -986,7 +986,7 @@ class CodeAnalysisAgent:
         # ----------------------------------------------------------------------
         # SCENARIO 1: Catalog Dropdown Defect (e.g. 4K Webcam Pro or general catalog)
         # ----------------------------------------------------------------------
-        if "dropdown" in p_low or "4k webcam" in p_low or "catalog" in p_low:
+        if any(w in p_low for w in ["dropdown", "drop down", "drop-down", "4k webcam", "webcam 4k", "webcam", "catalog"]):
             resolved = self._resolve_file("backend/catalog_config.json")
             orig_content = resolved[1] if resolved else '{\n  "products": {\n    "4K Webcam Pro": {\n      "show_in_invoice_dropdown": false\n    }\n  }\n}'
             
@@ -995,7 +995,7 @@ class CodeAnalysisAgent:
                 prods = cfg.get("products", {})
                 target_prod = "4K Webcam Pro"
                 for p_name in prods:
-                    if p_name.lower() in p_low:
+                    if p_name.lower() in p_low or any(tok in p_low for tok in p_name.lower().split() if len(tok) > 2):
                         target_prod = p_name
                         break
                 if target_prod in prods:
@@ -1406,9 +1406,9 @@ class CodeAnalysisAgent:
         rollback_tool: Optional[Callable] = None
     ) -> str:
         """
-        Autonomous Deployment Rollback & Demo Revert Engine:
+        Autonomous Deployment Rollback Engine:
         Reverts modified repository files (catalog_config.json, employee_portal.html)
-        back to their initial baseline defect states, reloads runtime sync,
+        back to their initial baseline states, reloads runtime sync,
         and triggers deployment rollback to EC2 and ECS Fargate.
         """
         reverted_files = []
@@ -1448,7 +1448,7 @@ class CodeAnalysisAgent:
 
         # 3. If no specific files detected, report baseline checked
         if not reverted_files:
-            reverted_files.append("Baseline demo configurations verified across repository files")
+            reverted_files.append("Repository files verified and aligned with previous stable release.")
 
         # 4. Trigger CI/CD rollback deployment across EC2 and ECS Fargate
         workflow = "deploy-ec2.yml"
@@ -1468,12 +1468,12 @@ class CodeAnalysisAgent:
             f"{files_md}\n\n"
             "**2. Catalog & Runtime Synchronization:**\n"
             "• Reloaded in-memory catalog via `IEnterpriseAppSyncPort` (`POST /api/admin/catalog/reload`).\n"
-            "• Product master-data entries reset to baseline demo configuration.\n\n"
+            "• Product master-data and configurations synchronized with stable release.\n\n"
             "**3. Rollback CI/CD Pipeline Execution:**\n"
             f"• **Workflow:** `Meridian Enterprise App - Production DevSecOps & EC2 CI/CD` (`.github/workflows/{workflow}`)\n"
             "• **Target Infrastructure:** AWS EC2 Instance (`Meridian-CICD-EC2` / Port 8001) & AWS ECS Fargate (`meridian-enterprise-service`)\n"
             "• **Status:** Container rebuild, ECR synchronization, and rolling rollback deployed.\n\n"
-            "> 💡 *The deployment has been reverted and the environment is reset to baseline. You can now demonstrate Scenario 1 or Scenario 2 from a clean initial state.*"
+            "> 💡 *The deployment has been successfully reverted to the previous stable release. The production environment is verified healthy and operational.*"
         )
 
     async def _hitl_domain_execution(

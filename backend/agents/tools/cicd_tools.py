@@ -35,7 +35,7 @@ def build_cicd_tools(cicd_port: Optional[ICICDDeploymentPort] = None):
         workflow_file: str = "deploy-ec2.yml",
         target_commit: str = "HEAD~1"
     ) -> str:
-        """Rolls back the last deployment to the previous stable release or reverts changes for repeated demo execution."""
+        """Rolls back the last deployment to the previous stable release."""
         if hasattr(port, "rollback_deployment"):
             res = port.rollback_deployment(workflow_file=workflow_file, target_commit=target_commit)
             return f"Rollback initiated: {res.get('message', 'Deployment successfully rolled back.')} Run ID: {res.get('run_id', 'n/a')}."

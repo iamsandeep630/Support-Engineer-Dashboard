@@ -502,8 +502,8 @@ class TestCodeAnalysisAgent(unittest.TestCase):
 
     @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
     @patch("agents.code_analysis_agent._load_env_secret")
-    def test_rollback_deployment_reverts_demo_scenarios(self, mock_secret, mock_agent):
-        """Verify rollback_deployment tool and intent reverts code changes to baseline and resets demo."""
+    def test_rollback_deployment_reverts_code_changes(self, mock_secret, mock_agent):
+        """Verify rollback_deployment tool and intent reverts code changes to previous release."""
         mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
 
         mock_repo = MagicMock(spec=ICodeRepositoryPort)
@@ -527,7 +527,7 @@ class TestCodeAnalysisAgent(unittest.TestCase):
         )
 
         res = asyncio.run(agent.query_async(
-            "Please revert the last deployment and reset demo scenario state.",
+            "Please revert the last deployment to the previous stable release.",
             session_id="rollback-test-session"
         ))
 
@@ -535,6 +535,8 @@ class TestCodeAnalysisAgent(unittest.TestCase):
         self.assertIn("Reverted Last Deployment", res)
         self.assertIn("catalog_config.json", res)
         self.assertIn("employee_portal.html", res)
+        self.assertNotIn("demonstrate Scenario", res)
+        self.assertIn("verified healthy and operational", res)
 
         # Verify commits to restore baseline state
         self.assertTrue(mock_repo.commit_file_change.called)
@@ -544,6 +546,67 @@ class TestCodeAnalysisAgent(unittest.TestCase):
         mock_cicd.rollback_deployment.assert_called_once()
         # Verify pending action is clean
         self.assertIsNone(agent.get_pending_action(session_id="rollback-test-session"))
+
+    @patch("agents.code_analysis_agent.Agent", side_effect=Exception("Fallback to domain handler"))
+    @patch("agents.code_analysis_agent._load_env_secret")
+    def test_webcam_dropdown_query_variants_and_multiturn(self, mock_secret, mock_agent):
+        """Verify queries with 'Webcam 4K Pro' and spaced 'drop down menu' are recognized accurately in multi-turn chat."""
+        mock_secret.side_effect = lambda keys, default="": "dummy-token" if "token" in keys[0].lower() else default
+
+        mock_repo = MagicMock(spec=ICodeRepositoryPort)
+        mock_repo.get_file_contents.side_effect = lambda p: (
+            '{\n  "products": {\n    "4K Webcam Pro": {\n      "show_in_invoice_dropdown": false\n    }\n  }\n}'
+            if "catalog_config" in p else None
+        )
+        mock_repo.commit_file_change.return_value = {"success": True, "commit_sha": "abc1234"}
+
+        mock_cicd = MagicMock(spec=ICICDDeploymentPort)
+        mock_cicd.trigger_workflow.return_value = {"success": True, "run_id": "run-987"}
+
+        mock_sync = MagicMock(spec=IEnterpriseAppSyncPort)
+        mock_sync.reload_catalog.return_value = {"success": True}
+
+        agent = CodeAnalysisAgent(
+            repo_port=mock_repo,
+            cicd_port=mock_cicd,
+            sync_port=mock_sync
+        )
+
+        session_id = "alex-turner-chat"
+
+        # Turn 1: Alex's exact initial query
+        q1 = "Hey, can you check why Webcam 4K Pro is not showing up in the product list drop down menu?"
+        res1 = asyncio.run(agent.query_async(q1, session_id=session_id))
+
+        self.assertIn("STAGE 1: INVESTIGATION", res1)
+        self.assertIn("Invoice Dropdown Missing Products", res1)
+        self.assertIn("backend/catalog_config.json", res1)
+        self.assertIn("4K Webcam Pro", res1)
+        self.assertIn("show_in_invoice_dropdown", res1)
+        self.assertIn("HUMAN-IN-THE-LOOP (HITL) APPROVAL GATE", res1)
+        self.assertIn("[ACTION_REQUIRED", res1)
+        self.assertIsNotNone(agent.get_pending_action(session_id=session_id))
+        self.assertEqual(agent.get_pending_action(session_id=session_id)["defect_type"], "CATALOG_DROPDOWN")
+
+        # Turn 2: Alex's exact follow-up query with history
+        q2 = "please investigate why the product is missing from the drop down menu in the enterprise application"
+        res2 = asyncio.run(agent.query_async(q2, session_id=session_id))
+
+        self.assertIn("STAGE 1: INVESTIGATION", res2)
+        self.assertIn("Invoice Dropdown Missing Products", res2)
+        self.assertIn("backend/catalog_config.json", res2)
+        self.assertIn("4K Webcam Pro", res2)
+        self.assertIn("show_in_invoice_dropdown", res2)
+        self.assertIn("HUMAN-IN-THE-LOOP (HITL) APPROVAL GATE", res2)
+        self.assertIn("[ACTION_REQUIRED", res2)
+        self.assertIsNotNone(agent.get_pending_action(session_id=session_id))
+
+        # Fresh session query without history should also recognize dropdown issue
+        res_fresh = asyncio.run(agent.query_async(q2, session_id="fresh-session"))
+        self.assertIn("STAGE 1: INVESTIGATION", res_fresh)
+        self.assertIn("backend/catalog_config.json", res_fresh)
+        self.assertIn("[ACTION_REQUIRED", res_fresh)
+        self.assertIsNotNone(agent.get_pending_action(session_id="fresh-session"))
 
 
 if __name__ == "__main__":

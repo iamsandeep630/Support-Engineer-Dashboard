@@ -32,17 +32,41 @@ async def broadcast_ticket_update(ticket_key: str, status: str):
 
 @router.post("/login")
 def support_login(payload: dict):
-    """Simple login endpoint for Support Engineer Alex Turner."""
+    """
+    Authentication endpoint for Support Engineer Alex Turner.
+    Validates credentials (alex@meridian.com / pass123).
+    """
     email = payload.get("email", "").lower().strip()
+    password = payload.get("password", "").strip()
+
+    valid_emails = {"alex@meridian.com", "alex", "alex.turner@meridian.com", "alex.turner"}
+    valid_passwords = {"pass123", "password123"}
+
+    if email not in valid_emails or password not in valid_passwords:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username/email or password."
+        )
+
     return {
         "access_token": "support-token-alex-turner-l2",
         "token_type": "bearer",
         "role": "support_engineer",
         "user": {
             "name": "Alex Turner",
-            "email": email or "alex.turner@meridian.com",
+            "email": "alex@meridian.com",
             "role": "Support Engineer"
         }
+    }
+
+@router.get("/me")
+@router.get("/api/auth/me")
+def get_current_user_profile():
+    """Returns profile for currently authenticated Support Engineer."""
+    return {
+        "name": "Alex Turner",
+        "email": "alex@meridian.com",
+        "role": "support_engineer"
     }
 
 @router.get("/api/dashboard/tickets")

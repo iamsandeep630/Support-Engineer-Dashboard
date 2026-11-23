@@ -5,6 +5,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Support Engineer Dashboard - SmartFix</title>
+  <script>
+    (function () {
+      const token = localStorage.getItem("support_token") || localStorage.getItem("access_token");
+      if (!token) {
+        window.location.replace("login.html");
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -1053,21 +1061,41 @@
       pointer-events: auto;
     }
 
+    .caa-overlay.fullscreen-mode {
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
     .caa-panel {
-      width: 440px;
+      width: 480px;
       max-width: 95vw;
       height: 100vh;
       display: flex;
       flex-direction: column;
       background: var(--bg-secondary);
       border-left: 1px solid var(--border);
-      box-shadow: -8px 0 40px rgba(0, 0, 0, 0.3);
+      box-shadow: -8px 0 40px rgba(0, 0, 0, 0.4);
       transform: translateX(100%);
-      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s ease, height 0.25s ease, border-radius 0.25s ease;
+      box-sizing: border-box;
     }
 
     .caa-overlay.open .caa-panel {
       transform: translateX(0);
+    }
+
+    .caa-panel.fullscreen {
+      width: 92vw;
+      max-width: 1300px;
+      height: 92vh;
+      max-height: 94vh;
+      border-radius: 16px;
+      border: 1px solid rgba(139, 92, 246, 0.35);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+      transform: none !important;
+      overflow: hidden;
     }
 
     .caa-header {
@@ -1078,6 +1106,7 @@
       border-bottom: 1px solid var(--border);
       background: var(--bg-glass-header);
       backdrop-filter: blur(12px);
+      flex-shrink: 0;
     }
 
     .caa-header-left {
@@ -1095,12 +1124,14 @@
       border-radius: 10px;
       background: linear-gradient(135deg, #7c3aed, #8b5cf6);
       color: white;
+      box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
     }
 
     .caa-title {
-      font-size: 14px;
+      font-size: 14.5px;
       font-weight: 700;
       color: var(--text-primary);
+      letter-spacing: -0.2px;
     }
 
     .caa-subtitle {
@@ -1108,118 +1139,238 @@
       color: var(--text-muted);
     }
 
-    .caa-close {
+    .caa-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .caa-btn-action {
       display: flex;
       align-items: center;
       justify-content: center;
       width: 32px;
       height: 32px;
       border-radius: 8px;
-      border: none;
+      border: 1px solid var(--border);
       background: var(--theme-toggle-bg);
       color: var(--text-secondary);
       cursor: pointer;
       transition: all 0.2s ease;
     }
 
-    .caa-close:hover {
+    .caa-btn-action:hover {
+      background: rgba(139, 92, 246, 0.15);
+      border-color: rgba(139, 92, 246, 0.4);
+      color: #a78bfa;
+      transform: scale(1.05);
+    }
+
+    .caa-btn-action.caa-close:hover {
       background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
       color: #ef4444;
     }
 
     .caa-messages {
       flex: 1;
       overflow-y: auto;
-      padding: 16px 16px 8px;
+      overflow-x: hidden;
+      padding: 18px 20px 12px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 16px;
+      box-sizing: border-box;
     }
 
     .caa-messages::-webkit-scrollbar {
-      width: 4px;
+      width: 6px;
     }
 
     .caa-messages::-webkit-scrollbar-thumb {
       background: var(--scrollbar-thumb);
-      border-radius: 2px;
+      border-radius: 3px;
     }
 
     .caa-message {
       display: flex;
-      gap: 8px;
-      max-width: 95%;
+      gap: 10px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
     }
 
     .caa-user {
       align-self: flex-end;
+      justify-content: flex-end;
       flex-direction: row-reverse;
     }
 
     .caa-agent {
       align-self: flex-start;
+      justify-content: flex-start;
+      width: 100%;
     }
 
     .caa-avatar {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 28px;
-      height: 28px;
+      width: 30px;
+      height: 30px;
       border-radius: 8px;
       background: linear-gradient(135deg, #7c3aed, #8b5cf6);
       color: white;
       flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
     }
 
     .caa-bubble {
-      padding: 10px 14px;
+      padding: 12px 16px;
       border-radius: 14px;
-      font-size: 13px;
-      line-height: 1.5;
+      font-size: 13.5px;
+      line-height: 1.6;
+      min-width: 0;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      box-sizing: border-box;
     }
 
     .caa-agent .caa-bubble {
+      flex: 1;
+      max-width: calc(100% - 40px);
       background: var(--bg-card);
-      border: 1px solid rgba(139, 92, 246, 0.15);
+      border: 1px solid rgba(139, 92, 246, 0.2);
       color: var(--text-primary);
       border-radius: 4px 14px 14px 14px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     }
 
     .caa-user .caa-bubble {
+      max-width: 82%;
       background: linear-gradient(135deg, #7c3aed, #6d28d9);
       color: white;
-      border-radius: 14px 4px 14px 14px;
+      border-radius: 14px 14px 4px 14px;
+      box-shadow: 0 2px 8px rgba(124, 58, 237, 0.2);
+    }
+
+    .caa-bubble h3, .caa-bubble h4 {
+      margin: 10px 0 4px 0;
+      font-weight: 700;
+      letter-spacing: -0.2px;
     }
 
     .caa-bubble strong {
       font-weight: 700;
+      color: #93c5fd;
     }
 
     .caa-bubble code {
-      padding: 1px 5px;
+      padding: 2px 6px;
       border-radius: 4px;
       font-size: 12px;
-      background: var(--code-inline-bg);
-      color: #a78bfa;
-      font-family: 'Fira Code', monospace;
+      background: rgba(99, 102, 241, 0.18);
+      color: #c4b5fd;
+      font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    }
+
+    .caa-bubble pre {
+      margin: 10px 0;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: #090d16;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      color: #e2e8f0;
+      font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-width: 100%;
+      box-sizing: border-box;
+      white-space: pre;
     }
 
     .caa-bubble blockquote {
-      margin: 6px 0;
-      padding: 6px 10px;
-      border-left: 2px solid rgba(139, 92, 246, 0.3);
-      font-size: 12px;
+      margin: 10px 0;
+      padding: 8px 14px;
+      border-left: 3px solid #8b5cf6;
+      background: rgba(139, 92, 246, 0.08);
+      border-radius: 0 8px 8px 0;
+      font-size: 12.5px;
       color: var(--text-secondary);
+    }
+
+    .caa-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin: 12px 0;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      box-sizing: border-box;
+    }
+
+    .caa-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      text-align: left;
+    }
+
+    .caa-table th, .caa-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .caa-table th {
+      background: rgba(139, 92, 246, 0.15);
+      color: #93c5fd;
+      font-weight: 700;
+    }
+
+    .caa-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .caa-diff-add {
+      color: #4ade80 !important;
+      background: rgba(74, 222, 128, 0.12);
+      display: block;
+      margin: 0 -14px;
+      padding: 0 14px;
+    }
+
+    .caa-diff-del {
+      color: #f87171 !important;
+      background: rgba(248, 113, 113, 0.12);
+      display: block;
+      margin: 0 -14px;
+      padding: 0 14px;
+    }
+
+    .caa-diff-hunk {
+      color: #c084fc !important;
+      background: rgba(192, 132, 252, 0.08);
+      display: block;
+      margin: 0 -14px;
+      padding: 0 14px;
+      font-weight: 600;
+    }
+
+    .caa-diff-meta {
+      color: #38bdf8 !important;
+      display: block;
+      font-weight: 700;
     }
 
     .caa-input-area {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 12px 16px;
+      padding: 14px 18px;
       border-top: 1px solid var(--border);
       background: var(--bg-glass-header);
+      flex-shrink: 0;
     }
 
     .caa-input {
@@ -1500,13 +1651,21 @@
               <div class="caa-subtitle">AI-Powered Code Intelligence</div>
             </div>
           </div>
-          <button class="caa-close" onclick="toggleCaa(false)" title="Close">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          <div class="caa-header-actions">
+            <button class="caa-btn-action" id="caaFullscreenBtn" onclick="toggleCaaFullscreen()" title="Toggle Fullscreen">
+              <svg id="caaFullscreenIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+              </svg>
+            </button>
+            <button class="caa-btn-action caa-close" onclick="toggleCaa(false)" title="Close">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div class="caa-messages" id="caaMessages">
@@ -1603,13 +1762,15 @@
     });
 
     function handleSignOut() {
+      localStorage.removeItem('support_token');
       localStorage.removeItem('access_token');
       localStorage.removeItem('customer_token');
       localStorage.removeItem('customer_email');
       localStorage.removeItem('shopmart_token');
       localStorage.removeItem('shopmart_email');
       localStorage.removeItem('user_role');
-      window.location.href = 'login.html';
+      localStorage.removeItem('user_name');
+      window.location.replace('login.html?logout=true');
     }
 
     // ─── Tickets & State Management ─────────────────────────────────────────
@@ -2043,24 +2204,128 @@
       if (open) setTimeout(() => document.getElementById('caaInput').focus(), 150);
     }
 
+    function toggleCaaFullscreen() {
+      const panel = document.querySelector('.caa-panel');
+      const overlay = document.getElementById('caaOverlay');
+      const isFull = panel.classList.toggle('fullscreen');
+      overlay.classList.toggle('fullscreen-mode', isFull);
+      const btn = document.getElementById('caaFullscreenBtn');
+      const icon = document.getElementById('caaFullscreenIcon');
+      if (isFull) {
+        btn.title = "Exit Fullscreen (Esc)";
+        icon.innerHTML = '<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />';
+      } else {
+        btn.title = "Full Screen View";
+        icon.innerHTML = '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />';
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const overlay = document.getElementById('caaOverlay');
+        const panel = document.querySelector('.caa-panel');
+        if (overlay && overlay.classList.contains('open')) {
+          if (panel && panel.classList.contains('fullscreen')) {
+            toggleCaaFullscreen();
+          } else {
+            toggleCaa(false);
+          }
+        }
+      }
+    });
+
+    function formatDiffLine(line) {
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        return `<span class="caa-diff-add">${line}</span>`;
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        return `<span class="caa-diff-del">${line}</span>`;
+      } else if (line.startsWith('@@')) {
+        return `<span class="caa-diff-hunk">${line}</span>`;
+      } else if (line.startsWith('---') || line.startsWith('+++')) {
+        return `<span class="caa-diff-meta">${line}</span>`;
+      }
+      return line;
+    }
+
+    function formatMarkdownTable(tableBlock) {
+      const lines = tableBlock.trim().split(/\r?\n/).filter(l => l.trim().startsWith('|'));
+      if (lines.length < 2) return tableBlock;
+      let html = '<div class="caa-table-wrap"><table class="caa-table">';
+      let inHeader = true;
+      for (let i = 0; i < lines.length; i++) {
+        const row = lines[i].trim();
+        if (/^\|(?:\s*:?-+:?\s*\|)+$/.test(row)) {
+          inHeader = false;
+          continue;
+        }
+        const cells = row.split('|').slice(1, -1).map(c => c.trim());
+        const tag = inHeader ? 'th' : 'td';
+        html += '<tr>' + cells.map(c => `<${tag}>${formatInlineMarkdown(c)}</${tag}>`).join('') + '</tr>';
+      }
+      html += '</table></div>';
+      return html;
+    }
+
+    function formatInlineMarkdown(text) {
+      if (!text) return '';
+      let res = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+      res = res.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      res = res.replace(/\*(.*?)\*/g, '<em>$1</em>');
+      return res;
+    }
+
     function formatCaaMarkdown(text) {
       if (!text) return '';
-      // Code blocks ```...```
-      let formatted = text.replace(/```([a-zA-Z0-9_]*)\n([\s\S]*?)```/g, (m, lang, code) => {
-        return `<pre style="background:var(--code-bg, rgba(0,0,0,0.5)); border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:10px; font-family:'Fira Code',monospace; font-size:12px; overflow-x:auto; margin:8px 0; color:#38bdf8; white-space:pre-wrap;"><code>${escapeHtml(code.trim())}</code></pre>`;
+
+      // 1. Extract code blocks ```...``` to placeholders to avoid regex collisions
+      const codeBlocks = [];
+      let formatted = text.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (m, lang, code) => {
+        const langLower = (lang || '').toLowerCase();
+        const isDiff = langLower === 'diff' || code.includes('--- a/') || code.includes('+++ b/');
+        let renderedCode;
+        if (isDiff) {
+          renderedCode = escapeHtml(code.trim()).split(/\r?\n/).map(formatDiffLine).join('\n');
+        } else {
+          renderedCode = escapeHtml(code.trim());
+        }
+        const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
+        codeBlocks.push(`<pre><code>${renderedCode}</code></pre>`);
+        return placeholder;
       });
-      // Inline code `...`
-      formatted = formatted.replace(/`([^`]+)`/g, '<code style="background:rgba(99,102,241,0.2); padding:2px 6px; border-radius:4px; font-family:\'Fira Code\',monospace; font-size:12px; color:#a5b4fc;">$1</code>');
-      // Headers ###
-      formatted = formatted.replace(/^### (.*$)/gim, '<h4 style="margin:10px 0 4px; color:#60a5fa; font-size:14px;">$1</h4>');
-      // Headers ##
-      formatted = formatted.replace(/^## (.*$)/gim, '<h3 style="margin:12px 0 6px; color:#93c5fd; font-size:15px;">$1</h3>');
-      // Bold **...**
+
+      // 2. Extract and format markdown tables
+      formatted = formatted.replace(/((?:^\|[^\n]+\|\r?\n?){2,})/gm, (tableBlock) => {
+        return formatMarkdownTable(tableBlock);
+      });
+
+      // 3. Blockquotes > ...
+      formatted = formatted.replace(/^>\s*(.*?)$/gm, '<blockquote>$1</blockquote>');
+
+      // 4. Horizontal dividers (--- or ───)
+      formatted = formatted.replace(/^(?:---|───+)$/gm, '<hr style="border:none; border-top:1px solid rgba(139,92,246,0.25); margin:12px 0;">');
+
+      // 5. Headers
+      formatted = formatted.replace(/^### (.*$)/gim, '<h4 style="margin:12px 0 6px; color:#60a5fa; font-size:14px;">$1</h4>');
+      formatted = formatted.replace(/^## (.*$)/gim, '<h3 style="margin:14px 0 8px; color:#93c5fd; font-size:15px;">$1</h3>');
+
+      // 6. Inline formatting: bold, italics, inline code
       formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      // Bullet list items
-      formatted = formatted.replace(/^[•\-\*] (.*$)/gim, '<div style="margin:2px 0 2px 14px;">• $1</div>');
-      // Line breaks
+      formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+      // 7. Bullet lists
+      formatted = formatted.replace(/^[•\-\*] (.*$)/gim, '<div style="margin:3px 0 3px 12px; display:flex; gap:6px;"><span>•</span><span>$1</span></div>');
+
+      // 8. Numbered lists (e.g. "1. ", "2. ")
+      formatted = formatted.replace(/^(\d+)\.\s+(.*$)/gim, '<div style="margin:3px 0 3px 12px; display:flex; gap:6px;"><span style="color:#a78bfa; font-weight:700;">$1.</span><span>$2</span></div>');
+
+      // 9. Line breaks
       formatted = formatted.replace(/\n/g, '<br>');
+
+      // 10. Reinsert code blocks
+      codeBlocks.forEach((block, idx) => {
+        formatted = formatted.replace(`__CODE_BLOCK_${idx}__`, block);
+      });
+
       return formatted;
     }
 
@@ -2133,16 +2398,16 @@
       let hitlBanner = "";
       if (requiresApproval || stage === "STAGE_1_INVESTIGATION" || reply.includes("[ACTION_REQUIRED")) {
         hitlBanner = `
-          <div class="hitl-gate-container" style="margin-top:14px; padding:12px 16px; background:linear-gradient(135deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6)); border:1px solid #3b82f6; border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div class="hitl-gate-container" style="margin-top:14px; padding:12px 16px; background:linear-gradient(135deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6)); border:1px solid #3b82f6; border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; box-sizing:border-box; width:100%;">
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="font-size:18px;">🛡️</span>
               <div>
                 <div style="font-size:12.5px; font-weight:700; color:#93c5fd;">Autonomous Agent HITL Approval Gate</div>
-                <div style="font-size:11.5px; color:#cbd5e1;">Review proposed diff above before deploying to AWS ECS Fargate</div>
+                <div style="font-size:11.5px; color:#cbd5e1;">Review proposed diff above before committing & deploying</div>
               </div>
             </div>
             <button type="button" onclick="approveAndDeployFix(this)" class="btn-hitl-approve" style="background:#2563eb; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow: 0 2px 6px rgba(37,99,235,0.4);">
-              <span>🚀 Approve & Deploy to ECS Fargate</span>
+              <span>🚀 Approve & Deploy Fix</span>
             </button>
           </div>
         `;
@@ -2167,11 +2432,11 @@
     async function approveAndDeployFix(btn) {
       if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span>⏳ Dispatching CI/CD to ECS Fargate...</span>';
+        btn.innerHTML = '<span>⏳ Dispatching CI/CD Pipeline...</span>';
         btn.style.opacity = '0.7';
       }
       const input = document.getElementById('caaInput');
-      if (input) input.value = 'Approve and deploy fix to AWS ECS Fargate';
+      if (input) input.value = 'Approve and deploy';
       await sendCaaMsg();
     }
 

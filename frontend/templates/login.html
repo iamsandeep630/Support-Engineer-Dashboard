@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Meridian Workspace - Sign in</title>
+<title>Meridian Support - Sign in</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
@@ -227,34 +227,6 @@
     text-align: left;
   }
 
-  /* Footer helpers */
-  .footer-links {
-    margin-top: 20px;
-    font-size: 12px;
-    color: var(--ink-muted);
-    text-align: center;
-  }
-  .footer-links a {
-    color: var(--primary);
-    text-decoration: none;
-    font-weight: 600;
-  }
-  .footer-links a:hover {
-    text-decoration: underline;
-  }
-
-  .demo-pill {
-    margin-top: 14px;
-    background: #f1f5f9;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 11px;
-    color: var(--ink-muted);
-    line-height: 1.45;
-    text-align: left;
-  }
-
   /* Role Switcher Tabs */
   .role-toggle-bar {
     display: flex;
@@ -286,26 +258,17 @@
     color: var(--primary);
     box-shadow: 0 2px 4px rgba(15,23,42,0.08);
   }
-  .guest-store-cta {
+
+  .demo-pill {
     margin-top: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    color: var(--primary);
-    text-decoration: none;
-    font-size: 12.5px;
-    font-weight: 600;
-    padding: 9px 12px;
-    background: #eff6ff;
+    background: #f1f5f9;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    border: 1px dashed #bfdbfe;
-    width: 100%;
-    transition: background 0.15s ease;
-  }
-  .guest-store-cta:hover {
-    background: #dbeafe;
-    text-decoration: none;
+    padding: 10px 12px;
+    font-size: 11px;
+    color: var(--ink-muted);
+    line-height: 1.45;
+    text-align: left;
   }
 </style>
 </head>
@@ -323,47 +286,44 @@
     <span class="brand-name">Meridian</span>
   </div>
 
-  <!-- Main Login Card (Dual Persona: Customer vs Employee) -->
+  <!-- Main Login Card (Support Engineer Persona) -->
   <div class="login-card">
     <!-- Blue Banner with dynamic tag -->
     <div class="card-banner">
-      <span class="welcome-back-badge" id="bannerBadge">Customer Store</span>
+      <span class="welcome-back-badge" id="bannerBadge">Support Engineer Workspace</span>
     </div>
 
     <!-- Centered Overlapping Avatar Circle -->
     <div class="avatar-wrapper">
-      <div class="avatar-circle" id="roleAvatar">🛍️</div>
+      <div class="avatar-circle" id="roleAvatar">👨‍💻</div>
     </div>
 
     <!-- Card Content -->
     <div class="card-body">
-      <!-- Role Toggle Bar -->
+      <!-- Role Indicator Bar -->
       <div class="role-toggle-bar">
-        <button type="button" class="role-toggle-btn active" id="tabCustomer" onclick="selectRole('customer')">
-          <span>🛍️ Customer</span>
-        </button>
-        <button type="button" class="role-toggle-btn" id="tabEmployee" onclick="selectRole('employee')">
-          <span>💼 Employee</span>
+        <button type="button" class="role-toggle-btn active" id="tabSupport" style="cursor: default;">
+          <span>🛠️ Support Engineer</span>
         </button>
       </div>
 
-      <h2 class="welcome-title" id="loginTitle">Customer Sign In</h2>
-      <p class="welcome-subtitle" id="loginSubtitle">Sign in to track orders, saved items, and checkout.</p>
+      <h2 class="welcome-title" id="loginTitle">Support Engineer Sign In</h2>
+      <p class="welcome-subtitle" id="loginSubtitle">Sign in to access Jira escalations and Code Analysis Agent.</p>
 
       <div id="errorBanner"></div>
 
       <div class="field">
         <label>Username / Email</label>
-        <input type="text" id="email" value="customer@meridian.com" placeholder="e.g. customer@meridian.com or employee@meridian.com" />
+        <input type="text" id="email" value="alex@meridian.com" placeholder="alex@meridian.com" autocomplete="username" />
       </div>
 
       <div class="field">
         <label>Password</label>
         <div class="password-wrapper">
-          <input type="password" id="password" value="password123" placeholder="••••••••" />
+          <input type="password" id="password" value="" placeholder="••••••••" autocomplete="current-password" />
           <button type="button" class="toggle-pwd" id="togglePwdBtn" title="Show/hide password">
             <svg id="eyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
               <circle cx="12" cy="12" r="3"></circle>
             </svg>
           </button>
@@ -371,66 +331,26 @@
       </div>
 
       <button class="submit-btn" id="submitBtn">Sign In</button>
-
-      <a href="customer_store.html" class="guest-store-cta" id="guestStoreCta">
-        <span>🛍️</span>
-        <span>Browse Products as Guest (No Sign-In Required) →</span>
-      </a>
     </div>
   </div>
 
-
-
 <script>
   const API_BASE = window.location.origin;
+
+  // Check if already authenticated (skip login if token exists and not explicitly logging out)
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has("logout")) {
+    const existingToken = localStorage.getItem("support_token") || localStorage.getItem("access_token");
+    if (existingToken) {
+      window.location.replace("support_dashboard.html");
+    }
+  }
 
   const emailInput = document.getElementById("email");
   const passwordInput = document.getElementById("password");
   const submitBtn = document.getElementById("submitBtn");
   const errorBanner = document.getElementById("errorBanner");
   const togglePwdBtn = document.getElementById("togglePwdBtn");
-  const tabCustomer = document.getElementById("tabCustomer");
-  const tabEmployee = document.getElementById("tabEmployee");
-  const roleAvatar = document.getElementById("roleAvatar");
-  const loginTitle = document.getElementById("loginTitle");
-  const loginSubtitle = document.getElementById("loginSubtitle");
-  const bannerBadge = document.getElementById("bannerBadge");
-  const guestStoreCta = document.getElementById("guestStoreCta");
-
-  function selectRole(role) {
-    if (role === 'customer') {
-      tabCustomer.classList.add("active");
-      tabEmployee.classList.remove("active");
-      roleAvatar.textContent = "🛍️";
-      roleAvatar.style.fontSize = "28px";
-      loginTitle.textContent = "Customer Sign In";
-      loginSubtitle.textContent = "Sign in to track orders, saved items, and checkout.";
-      bannerBadge.textContent = "Customer Store";
-      emailInput.value = "customer@meridian.com";
-      passwordInput.value = "password123";
-      guestStoreCta.style.display = "flex";
-    } else {
-      tabEmployee.classList.add("active");
-      tabCustomer.classList.remove("active");
-      roleAvatar.textContent = "💼";
-      roleAvatar.style.fontSize = "26px";
-      loginTitle.textContent = "Employee Sign In";
-      loginSubtitle.textContent = "Sign in to your Operations & Finance Workspace.";
-      bannerBadge.textContent = "Employee Workspace";
-      emailInput.value = "employee@meridian.com";
-      passwordInput.value = "password123";
-      guestStoreCta.style.display = "none";
-    }
-    errorBanner.innerHTML = "";
-  }
-
-  // Check URL query param for default selection (?role=employee or ?role=customer)
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("role") === "employee") {
-    selectRole("employee");
-  } else {
-    selectRole("customer");
-  }
 
   // Toggle password visibility
   togglePwdBtn.addEventListener("click", () => {
@@ -473,12 +393,13 @@
 
       // Store tokens
       localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("support_token", data.access_token);
       localStorage.setItem("customer_token", data.access_token);
       localStorage.setItem("customer_email", email);
-      localStorage.setItem("shopmart_token", data.access_token);
-      localStorage.setItem("shopmart_email", email);
-      if (data.role) {
-        localStorage.setItem("user_role", data.role);
+      localStorage.setItem("user_email", email);
+      localStorage.setItem("user_role", data.role || "support_engineer");
+      if (data.user && data.user.name) {
+        localStorage.setItem("user_name", data.user.name);
       }
 
       console.log("Login success! User role:", data.role);
